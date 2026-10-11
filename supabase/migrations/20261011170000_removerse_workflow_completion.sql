@@ -89,6 +89,7 @@ create or replace function public.create_removerse_registration(
   p_phone text,
   p_email text,
   p_team text,
+  p_members jsonb,
   p_rules_accepted boolean
 )
 returns table (
@@ -139,7 +140,7 @@ begin
   end if;
   insert into public.registrations(
     event_id, participant_name, college, department, study_year, phone, email,
-    team_name, utr, payment_proof_path, fee_inr, payment_status, registration_status, rules_accepted
+    team_name, members, utr, payment_proof_path, fee_inr, payment_status, registration_status, rules_accepted
   ) values (
     ev.id, trim(p_name), trim(p_college), trim(p_department), trim(p_study_year), trim(p_phone), lower(trim(p_email)),
     nullif(trim(coalesce(p_team,'')),''), coalesce(p_members,'[]'::jsonb), null, null, ev.fee_inr,
@@ -152,7 +153,7 @@ begin
 end;
 $$;
 revoke all on function public.create_removerse_registration(uuid,text,text,text,text,text,text,text,jsonb,boolean) from public, anon, authenticated;
-grant execute on function public.create_removerse_registration(uuid,text,text,text,text,text,text,text,boolean) to service_role;
+grant execute on function public.create_removerse_registration(uuid,text,text,text,text,text,text,text,jsonb,boolean) to service_role;
 
 -- Authenticated organisers can manage event records only when their profile role is admin.
 drop policy if exists "Admins manage REMOVERSE events" on public.events;
