@@ -88,7 +88,7 @@ create policy "public submits registrations" on public.registrations
     and payment_status = case when fee_inr = 0 then 'not_required' else 'pending_verification' end
     and registration_status = case when fee_inr = 0 then 'confirmed' else 'pending' end
     and reviewed_by is null and reviewed_at is null
-    and exists(select 1 from public.events e where e.id = event_id and e.is_active and e.fee_inr = fee_inr)
+    and exists(select 1 from public.events e where e.id = event_id and e.is_active and e.fee_inr = registrations.fee_inr)
   );
 drop policy if exists "admins read registrations" on public.registrations;
 create policy "admins read registrations" on public.registrations
