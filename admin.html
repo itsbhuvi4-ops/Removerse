@@ -52,14 +52,14 @@ async function refreshAll(){
   if(!currentUser)return;
   setMessage("Refreshing live database…");
   const [regRes,eventRes]=await Promise.all([
-    sb.from("registrations").select("id,registration_code,event_id,participant_name,college,department,study_year,phone,email,team_name,utr,payment_proof_path,fee_inr,payment_status,registration_status,created_at,payment_started_at,uploaded_at,arrived_at,admin_reminder_sent,review_note,events(title)").order("created_at",{ascending:false}).limit(1000),
+    sb.from("registrations").select("id,registration_code,event_id,participant_name,college,department,study_year,phone,email,team_name,members,utr,payment_proof_path,fee_inr,payment_status,registration_status,created_at,payment_started_at,uploaded_at,arrived_at,admin_reminder_sent,review_note,events(title)").order("created_at",{ascending:false}).limit(1000),
     sb.from("events").select("id,title,category,fee_inr,registration_type,min_team_size,max_team_size,is_active,is_featured,seats,event_date,venue,coordinator,subtitle,description,rules").order("created_at",{ascending:true})
   ]);
   if(regRes.error)throw new Error("Could not load registrations: "+regRes.error.message);
   if(eventRes.error)throw new Error("Could not load events: "+eventRes.error.message);
   registrations=regRes.data||[];events=eventRes.data||[];
   $("total").textContent=registrations.length;
-  $("pending").textContent=registrations.filter(r=>r.payment_status==="pending_verification").length;
+  $("pending").textContent=registrations.filter(r=>r.payment_status==="pending_verification"&&!!r.payment_proof_path).length;
   $("free").textContent=registrations.filter(r=>Number(r.fee_inr)===0).length;
   $("eventcount").textContent=events.filter(e=>e.is_active).length;
   $("income").textContent="₹"+registrations.filter(r=>r.registration_status!=="rejected").reduce((sum,r)=>sum+(Number(r.fee_inr)||0),0).toLocaleString("en-IN");
@@ -71,7 +71,7 @@ function renderRows(){
   const list=registrations.filter(r=>(!s||r.registration_status===s)&&[r.registration_code,r.participant_name,r.email,r.college,r.phone,r.events?.title].some(v=>String(v||"").toLowerCase().includes(q)));
   $("rows").innerHTML=list.length?list.map(r=>{
     const paid=Number(r.fee_inr)>0;
-    const canReview=paid&&r.payment_status==="pending_verification"&&r.registration_status!=="rejected";
+    const canReview=paid&&!!r.payment_proof_path&&r.payment_status==="pending_verification"&&r.registration_status!=="rejected";
     const ageMs=r.uploaded_at?Date.now()-new Date(r.uploaded_at).getTime():0;const overdue=r.payment_status==="pending_verification"&&ageMs>24*60*60*1000;const hoursLeft=Math.ceil((24*60*60*1000-ageMs)/3600000);
     return '<tr'+(overdue?' style="background:#6b202433;border-left:3px solid #ff6b57"':'')+'><td><b>'+esc(r.registration_code)+'</b><br><span class="small">'+new Date(r.created_at).toLocaleString()+'</span>'+(r.uploaded_at?'<br><span class="small" style="color:'+(overdue?'#ff6b57':'#b6a6a0')+'">'+(overdue?'OVERDUE · '+Math.floor(ageMs/3600000)+'h elapsed':Math.max(0,hoursLeft)+'h left to review')+'</span>':'')+'<br>'+esc(r.department)+' · '+esc(r.study_year)+'</td><td><b>'+esc(r.participant_name)+'</b><br>'+esc(r.email)+'<br>'+esc(r.phone)+'<br>'+esc(r.college)+(r.team_name?'<br>Team: '+esc(r.team_name):'')+'</td><td>'+esc(r.events?.title||"Event")+'<br>₹'+esc(r.fee_inr)+'</td><td><span class="'+statusClass(r.payment_status)+'">'+esc((r.payment_status||"—").replaceAll("_"," ").toUpperCase())+'</span><br><br><span class="'+statusClass(r.registration_status)+'">'+esc((r.registration_status||"—").toUpperCase())+'</span>'+(r.utr?'<br><br>UTR: '+esc(r.utr):'')+(r.review_note?'<br><br>Note: '+esc(r.review_note):'')+'</td><td>'+(r.payment_proof_path?'<button class="btn" data-proof="'+esc(r.id)+'">View private proof ↗</button>':'<span class="small">No proof attached</span>')+'</td><td>'+(canReview?'<div class="actions"><button class="btn primary" data-review="approve" data-id="'+esc(r.id)+'">Approve payment</button><button class="btn danger" data-review="reject" data-id="'+esc(r.id)+'">Reject</button></div>':'<span class="small">'+(paid?"No pending payment action":"No payment required")+'</span>')+'</td></tr>';
   }).join(""):'<tr><td colspan="6" class="empty">No matching registrations found.</td></tr>';
