@@ -16,9 +16,9 @@ Deno.serve(async req => {
   try {
     const body=await req.json(); const action=String(body.action||"");
     const lookup=String(body.lookup||"").trim().slice(0,254);
-    if(!lookup) return json({error:"Enter your registration email or phone."},400);
-    const emailLookup=lookup.includes("@");
     if(action==="request") {
+      if(!lookup) return json({error:"Enter your registration email or phone."},400);
+      const emailLookup=lookup.includes("@");
       let query=db.from("registrations").select("email").limit(1);
       query=emailLookup?query.ilike("email",lookup):query.eq("phone",lookup);
       const {data}=await query.maybeSingle();
