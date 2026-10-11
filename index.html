@@ -101,9 +101,11 @@ document.getElementById("regform").onsubmit = async event => {
   }
 };
 const paymentFlow = document.getElementById("paymentflow");
-document.getElementById("paymentclose").onclick = () => paymentFlow.classList.remove("show");
+let activePaymentTimer=null;
+document.getElementById("paymentclose").onclick = () => { paymentFlow.classList.remove("show"); if(activePaymentTimer)clearInterval(activePaymentTimer); };
 function safeText(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 async function openPaymentFlow(registration) {
+  if(activePaymentTimer)clearInterval(activePaymentTimer);
   paymentFlow.classList.add("show");
   const box=document.getElementById("paymentcontent");
   box.innerHTML='<p>Loading secure payment instructions…</p>';
@@ -116,7 +118,7 @@ async function openPaymentFlow(registration) {
       document.getElementById("retrytimer").onclick=()=>openPaymentFlow(registration);
     };
     draw();
-    const timer=setInterval(()=>{if(!paymentFlow.classList.contains("show")){clearInterval(timer);return;}if(left>0){left--;const t=document.getElementById("paytimer");if(t)t.textContent="00:"+String(left).padStart(2,"0");}if(left<=0&&!expired){expired=true;clearInterval(timer);draw();}},1000);
+    activePaymentTimer=setInterval(()=>{if(!paymentFlow.classList.contains("show")){clearInterval(activePaymentTimer);return;}if(left>0){left--;const t=document.getElementById("paytimer");if(t)t.textContent="00:"+String(left).padStart(2,"0");}if(left<=0&&!expired){expired=true;clearInterval(activePaymentTimer);draw();}},1000);
   } catch(err) { box.innerHTML='<p class="note" role="alert">'+safeText(err.message||"Payment could not load.")+'</p><button class="button" id="paytry" type="button">Try again</button>';document.getElementById("paytry").onclick=()=>openPaymentFlow(registration); }
 }
 async function loadLiveEvents() {
