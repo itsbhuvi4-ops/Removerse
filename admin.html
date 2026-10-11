@@ -173,7 +173,7 @@ document.addEventListener("click",async e=>{
     const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error("Your admin session has expired. Sign in again.");
     const response=await fetch(SUPABASE_URL+"/functions/v1/removerse-review",{method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_PUBLISHABLE_KEY,"Authorization":"Bearer "+session.access_token},body:JSON.stringify({id:row.id,action,reason:String(reason||"").trim()})});
     const result=await response.json();if(!response.ok||!result.success)throw new Error(result.error||"Review action failed.");
-    setMessage(action==="resend_confirmation"?(result.emailSent?"Confirmation email sent. The saved approval was not changed.":"Confirmation email was not sent."):(action==="approve"?(result.emailSent?"Payment approved; student email sent.":"Payment approved, but student email was not sent. Check Resend configuration/logs."):(result.emailSent?"Payment rejected; student email sent.":"Payment rejected, but student email was not sent. Check Resend configuration/logs."),!result.emailSent);
+    setMessage(action==="resend_confirmation"?(result.emailSent?"Confirmation email sent. The saved approval was not changed.":"Confirmation email was not sent."):(action==="approve"?(result.emailSent?"Payment approved; student email sent.":"Payment approved, but student email was not sent. Check Resend configuration/logs."):(result.emailSent?"Payment rejected; student email sent.":"Payment rejected, but student email was not sent. Check Resend configuration/logs.")),!result.emailSent);
     await refreshAll();
   }catch(err){setMessage(err.message||"Review action failed.",true);button.disabled=false;}
 },true);
