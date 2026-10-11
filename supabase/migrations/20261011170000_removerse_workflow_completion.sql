@@ -164,6 +164,16 @@ $$;
 revoke all on function public.create_removerse_registration(uuid,text,text,text,text,text,text,text,jsonb,boolean) from public, anon, authenticated;
 grant execute on function public.create_removerse_registration(uuid,text,text,text,text,text,text,text,jsonb,boolean) to service_role;
 
+do $
+begin
+  if not exists (select 1 from pg_constraint where conname = 'removerse_events_fee_nonnegative') then
+    alter table public.events add constraint removerse_events_fee_nonnegative check (fee_inr >= 0);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'removerse_events_team_size_valid') then
+    alter table public.events add constraint removerse_events_team_size_valid check (min_team_size >= 1 and max_team_size >= min_team_size);
+  end if;
+end $;
+
 -- Authenticated organisers can manage event records only when their profile role is admin.
 drop policy if exists "Admins manage REMOVERSE events" on public.events;
 create policy "Admins manage REMOVERSE events" on public.events for all to authenticated
