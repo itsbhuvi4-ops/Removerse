@@ -148,3 +148,34 @@ end;
 $$;
 revoke all on function public.create_removerse_registration(uuid,text,text,text,text,text,text,text,boolean) from public, anon, authenticated;
 grant execute on function public.create_removerse_registration(uuid,text,text,text,text,text,text,text,boolean) to service_role;
+
+-- Authenticated organisers can manage event records only when their profile role is admin.
+drop policy if exists "Admins manage REMOVERSE events" on public.events;
+create policy "Admins manage REMOVERSE events" on public.events for all to authenticated
+  using (exists (select 1 from public.profiles p where p.user_id = (select auth.uid()) and p.role = 'admin'))
+  with check (exists (select 1 from public.profiles p where p.user_id = (select auth.uid()) and p.role = 'admin'));
+
+create or replace function public.mark_removerse_arrived(p_registration_id uuid)
+returns table(registration_id uuid, registration_code text, arrived_at timestamptz)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare r public.registrations%rowtype;
+begin
+  if not exists (select 1 from public.profiles p where p.user_id = auth.uid() and p.role = 'admin') then
+    raise exception 'ADMIN_REQUIRED';
+  end if;
+  select * into r from public.registrations where id = p_registration_id for update;
+  if not found then raise exception 'REGISTRATION_NOT_FOUND'; end if;
+  if r.registration_status = 'arrived' then raise exception 'ALREADY_ARRIVED'; end if;
+  if r.payment_status not in ('approved','not_required') and r.registration_status <> 'confirmed' then
+    raise exception 'REGISTRATION_NOT_ELIGIBLE';
+  end if;
+  update public.registrations set registration_status = 'arrived', arrived_at = now()
+    where id = p_registration_id returning * into r;
+  return query select r.id, r.registration_code, r.arrived_at;
+end;
+$$;
+revoke all on function public.mark_removerse_arrived(uuid) from public, anon;
+grant execute on function public.mark_removerse_arrived(uuid) to authenticated;
