@@ -1,6 +1,15 @@
 -- Additive migration for the existing REMOVERSE Supabase schema.
 -- Existing registrations/events are preserved; this migration does not drop or rewrite records.
 
+alter table public.events
+  add column if not exists event_date date,
+  add column if not exists venue text,
+  add column if not exists coordinator text,
+  add column if not exists seats integer check (seats is null or seats >= 0),
+  add column if not exists is_featured boolean not null default false;
+alter table public.registrations
+  add column if not exists members jsonb not null default '[]'::jsonb;
+
 alter table public.registrations
   add column if not exists payment_started_at timestamptz,
   add column if not exists uploaded_at timestamptz,
