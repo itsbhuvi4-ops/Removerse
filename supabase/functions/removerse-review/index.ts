@@ -19,9 +19,10 @@ Deno.serve(async req=>{
   const b=await req.json(),id=String(b.id||""),action=String(b.action||""),reason=String(b.reason||"").trim().slice(0,500);
   if(!id||!["approve","reject"].includes(action))return out({error:"Invalid action"},400);
   if(action==="reject"&&!reason)return out({error:"Rejection reason is required"},400);
-  const {data:r,error}=await db.from("registrations").select("id,fee_inr,payment_status").eq("id",id).maybeSingle();
+  const {data:r,error}=await db.from("registrations").select("id,fee_inr,payment_status,payment_proof_path").eq("id",id).maybeSingle();
   if(error||!r)return out({error:"Registration not found"},404);
   if(Number(r.fee_inr)<=0||r.payment_status!=="pending_verification")return out({error:"Only pending paid registrations can be reviewed"},409);
+  if(action==="approve"&&!r.payment_proof_path)return out({error:"A payment screenshot must be uploaded before approval"},409);
   const paid=action==="approve";
   const {error:updateError}=await db.from("registrations").update({payment_status:paid?"approved":"rejected",registration_status:paid?"confirmed":"rejected",reviewed_by:user.user.id,reviewed_at:new Date().toISOString(),review_note:paid?"Payment manually verified by organiser.":reason}).eq("id",id).eq("payment_status","pending_verification");
   if(updateError)return out({error:"Review update failed"},500);
