@@ -17,7 +17,7 @@ Deno.serve(async req=>{
   if(type.includes("multipart/form-data")){form=await req.formData();action=String(form.get("action")||"upload");code=String(form.get("registrationCode")||"").trim();email=String(form.get("email")||"").trim().toLowerCase();}
   else{body=await req.json();action=String(body.action||"start");code=String(body.registrationCode||"").trim();email=String(body.email||"").trim().toLowerCase();}
   if(!code||!email||!/^\S+@\S+\.\S+$/.test(email))return json({error:"Registration code and valid email are required."},400);
-  const {data:r,error}=await db.from("registrations").select("id,registration_code,email,participant_name,team_name,college,event_id,fee_inr,payment_status,registration_status,payment_proof_path,uploaded_at,events(title)").eq("registration_code",code).ilike("email",email).maybeSingle();
+  const {data:r,error}=await db.from("registrations").select("id,registration_code,email,participant_name,team_name,college,event_id,fee_inr,payment_status,registration_status,payment_proof_path,payment_started_at,uploaded_at,events(title)").eq("registration_code",code).ilike("email",email).maybeSingle();
   if(error||!r)return json({error:"Registration could not be verified. Check the code and email."},404);
   if(Number(r.fee_inr)<=0)return json({error:"This is a free event; no payment is required."},400);
   if(r.payment_status==="approved")return json({error:"This registration is not accepting a new payment countdown."},409);
@@ -34,6 +34,10 @@ Deno.serve(async req=>{
   }
   if(action==="upload"){
    if(!form)return json({error:"Upload a payment screenshot."},400);
+   const {data:timerSetting}=await db.from("settings").select("value").eq("key","payment_countdown_seconds").maybeSingle();
+   const waitSeconds=Math.max(10,Number(timerSetting?.value??30)||30);
+   if(!r.payment_started_at || Date.now()<new Date(r.payment_started_at).getTime()+waitSeconds*1000)
+     return json({error:"The payment countdown has not finished yet. Wait until it ends before uploading proof."},409);
    const proof=form.get("proof");
    if(!(proof instanceof File)||proof.size<1)return json({error:"Choose a payment screenshot."},400);
    if(proof.size>5*1024*1024)return json({error:"Screenshot must be 5 MB or smaller."},400);
@@ -46,6 +50,7 @@ Deno.serve(async req=>{
    const uploadedAt=new Date().toISOString();
    const {error:updateError}=await db.from("registrations").update({payment_proof_path:path,uploaded_at:uploadedAt,payment_status:"pending_verification",registration_status:"pending",admin_reminder_sent:false,review_note:null,reviewed_by:null,reviewed_at:null}).eq("id",r.id).in("payment_status",["pending_verification","rejected"]);
    if(updateError){await db.storage.from("removerse-payment-proofs").remove([path]);path=null;console.error("proof record update failed",updateError.message);return json({error:"Screenshot uploaded but could not be attached. Please retry."},500);}
+   if(r.payment_proof_path && r.payment_proof_path!==path){const {error:oldProofCleanup}=await db.storage.from("removerse-payment-proofs").remove([r.payment_proof_path]);if(oldProofCleanup)console.error("old proof cleanup failed",oldProofCleanup.message);}
    const resend=Deno.env.get("RESEND_API_KEY"),from=Deno.env.get("FROM_EMAIL"),admin=Deno.env.get("ADMIN_EMAIL"),site=Deno.env.get("SITE_URL")||"https://removerse-2027.vercel.app";
    if(resend&&from){
     const event=(Array.isArray(r.events)?r.events[0]:r.events)?.title||"REMOVERSE Event",team=r.team_name||r.participant_name;
