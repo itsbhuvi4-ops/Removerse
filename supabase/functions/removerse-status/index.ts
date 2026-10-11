@@ -26,9 +26,9 @@ Deno.serve(async req => {
       if(data?.email) {
         const code=String(crypto.getRandomValues(new Uint32Array(1))[0]%1000000).padStart(6,"0");
         const lookupHash=await hash((emailLookup?lookup.toLowerCase():normPhone(lookup))+"|"+crypto.randomUUID());
-        await db.from("registration_access_codes").insert({lookup_hash:lookupHash,delivery_email:data.email,code_hash:await hash(code),expires_at:new Date(Date.now()+10*60*1000).toISOString()});
-        // The opaque request handle is returned; it contains no email or registration data.
-        const {data:stored}=await db.from("registration_access_codes").select("id").eq("delivery_email",data.email).order("created_at",{ascending:false}).limit(1).maybeSingle();
+        const {data:stored,error:challengeError}=await db.from("registration_access_codes").insert({lookup_hash:lookupHash,delivery_email:data.email,code_hash:await hash(code),expires_at:new Date(Date.now()+10*60*1000).toISOString()}).select("id").single();
+        if(challengeError){console.error("status challenge insert failed",challengeError.message);return json({error:"Could not send a verification code. Try again."},500);}
+        // The opaque request handle contains no email or registration data.
         const mail=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${resend}`,"Content-Type":"application/json"},body:JSON.stringify({from,to:[data.email],subject:"Your REMOVERSE registration access code",html:`<p>Your one-time code is <strong>${code}</strong>.</p><p>It expires in 10 minutes. If you did not request it, ignore this email.</p>`,text:`Your REMOVERSE one-time code is ${code}. It expires in 10 minutes.`})});
         if(!mail.ok) console.error("status OTP email failed",await mail.text());
         return json({success:true,message:"If a registration matches those details, a verification code has been sent.",requestId:stored?.id||null});
@@ -46,10 +46,10 @@ Deno.serve(async req => {
       }
       await db.from("registration_access_codes").update({consumed_at:new Date().toISOString()}).eq("id",challenge.id);
       const {data:registrations,error}=await db.from("registrations")
-        .select("id,registration_code,participant_name,team_name,college,email,phone,fee_inr,payment_status,registration_status,created_at,uploaded_at,review_note,events(title,slug)")
+        .select("id,registration_code,participant_name,team_name,college,email,phone,fee_inr,payment_status,registration_status,created_at,uploaded_at,review_note,arrived_at,events(title,slug,event_date,venue)")
         .ilike("email",challenge.delivery_email).order("created_at",{ascending:false}).limit(100);
       if(error) { console.error("status query failed",error.message); return json({error:"Could not load registrations."},500); }
-      return json({success:true,registrations:(registrations||[]).map(r=>({...r,boardingPassPayload:JSON.stringify({registrationId:r.registration_code,team:r.team_name||r.participant_name,event:(Array.isArray(r.events)?r.events[0]:r.events)?.title||"",date:"",venue:""})}))});
+      return json({success:true,registrations:(registrations||[]).map(r=>({...r,boardingPassPayload:JSON.stringify({registrationId:r.registration_code,team:r.team_name||r.participant_name,event:(Array.isArray(r.events)?r.events[0]:r.events)?.title||"",date:(Array.isArray(r.events)?r.events[0]:r.events)?.event_date||"",venue:(Array.isArray(r.events)?r.events[0]:r.events)?.venue||""})}))});
     }
     return json({error:"Unsupported action"},400);
   } catch(e) { console.error("status request failed",e instanceof Error?e.message:"unknown"); return json({error:"Unable to process request."},500); }
