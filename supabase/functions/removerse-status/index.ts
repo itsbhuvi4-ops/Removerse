@@ -33,7 +33,12 @@ Deno.serve(async req => {
         if(challengeError){console.error("status challenge insert failed",challengeError.message);return json({error:"Could not send a verification code. Try again."},500);}
         // The opaque request handle contains no email or registration data.
         const mail=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${resend}`,"Content-Type":"application/json"},body:JSON.stringify({from,to:[data.email],subject:"Your REMOVERSE registration access code",html:`<p>Your one-time code is <strong>${code}</strong>.</p><p>It expires in 10 minutes. If you did not request it, ignore this email.</p>`,text:`Your REMOVERSE one-time code is ${code}. It expires in 10 minutes.`})});
-        if(!mail.ok) console.error("status OTP email failed",await mail.text());
+        if(!mail.ok) {
+          const providerError = await mail.text();
+          console.error("status OTP email failed", providerError);
+          if (stored?.id) await db.from("registration_access_codes").delete().eq("id", stored.id);
+          return json({error:"Verification email could not be sent. Please check the organiser email configuration and try again."},502);
+        }
         return json({success:true,message:"If a registration matches those details, a verification code has been sent.",requestId:stored?.id||null});
       }
       return json({success:true,message:"If a registration matches those details, a verification code has been sent.",requestId:null});
