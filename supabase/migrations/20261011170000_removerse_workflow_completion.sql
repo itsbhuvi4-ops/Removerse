@@ -120,6 +120,11 @@ begin
   if ev.registration_type = 'team' and length(trim(coalesce(p_team,''))) < 2 then
     raise exception 'TEAM_REQUIRED';
   end if;
+  if ev.registration_type = 'team' and (
+    jsonb_typeof(coalesce(p_members,'[]'::jsonb)) <> 'array'
+    or jsonb_array_length(coalesce(p_members,'[]'::jsonb)) < coalesce(ev.min_team_size,2)
+    or jsonb_array_length(coalesce(p_members,'[]'::jsonb)) > coalesce(ev.max_team_size,10)
+  ) then raise exception 'TEAM_SIZE_INVALID'; end if;
   if ev.registration_type = 'individual' and length(trim(coalesce(p_team,''))) > 0 then
     raise exception 'TEAM_NOT_ALLOWED';
   end if;
@@ -137,7 +142,7 @@ begin
     team_name, utr, payment_proof_path, fee_inr, payment_status, registration_status, rules_accepted
   ) values (
     ev.id, trim(p_name), trim(p_college), trim(p_department), trim(p_study_year), trim(p_phone), lower(trim(p_email)),
-    nullif(trim(coalesce(p_team,'')),''), null, null, ev.fee_inr,
+    nullif(trim(coalesce(p_team,'')),''), coalesce(p_members,'[]'::jsonb), null, null, ev.fee_inr,
     case when ev.fee_inr > 0 then 'pending_verification' else 'not_required' end,
     case when ev.fee_inr > 0 then 'pending' else 'confirmed' end,
     true
@@ -146,7 +151,7 @@ begin
     new_row.payment_status, new_row.registration_status, ev.title;
 end;
 $$;
-revoke all on function public.create_removerse_registration(uuid,text,text,text,text,text,text,text,boolean) from public, anon, authenticated;
+revoke all on function public.create_removerse_registration(uuid,text,text,text,text,text,text,text,jsonb,boolean) from public, anon, authenticated;
 grant execute on function public.create_removerse_registration(uuid,text,text,text,text,text,text,text,boolean) to service_role;
 
 -- Authenticated organisers can manage event records only when their profile role is admin.
