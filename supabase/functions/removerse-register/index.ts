@@ -51,6 +51,12 @@ Deno.serve(async (req: Request) => {
     if (!url || !serviceKey) return respond({ error: "Registration service is not configured." }, 500);
     const supabase = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
     storageClient = supabase;
+    const { count: adminCount, error: adminCheckError } = await supabase
+      .from("profiles").select("user_id", { count: "exact", head: true }).eq("role", "admin");
+    if (adminCheckError) return respond({ error: "Registration service is temporarily unavailable. Please try again." }, 503);
+    if ((adminCount ?? 0) < 1) {
+      return respond({ error: "Registration is temporarily closed while organiser access is being configured. Please try again later." }, 503);
+    }
     const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const [emailRecent, phoneRecent] = await Promise.all([
       supabase.from("registrations").select("id", { count: "exact", head: true }).eq("email", email).gte("created_at", cutoff),
