@@ -104,7 +104,6 @@ $("search").oninput=renderRows;$("statusfilter").onchange=renderRows;
 document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-tab]").forEach(x=>x.classList.toggle("active",x===b));["registrations","events","payments","checkin","exports"].forEach(id=>$(id).hidden=id!==b.dataset.tab);});
 $("rows").addEventListener("click",async e=>{
   const proof=e.target.closest("[data-proof]");
-  const review=e.target.closest("[data-review]");
   if(proof){
     const row=registrations.find(r=>r.id===proof.dataset.proof);if(!row?.payment_proof_path)return;
     proof.disabled=true;proof.textContent="Creating secure link…";
@@ -112,18 +111,8 @@ $("rows").addEventListener("click",async e=>{
     catch(err){setMessage("Could not open proof: "+err.message,true);}
     finally{proof.disabled=false;proof.textContent="View private proof ↗";}
   }
-  if(review){
-    const row=registrations.find(r=>r.id===review.dataset.id);if(!row)return;
-    const approve=review.dataset.review==="approve";
-    const note=approve?"":prompt("Enter the reason for rejecting this registration/payment:");
-    if(!approve&&note===null)return;
-    if(approve&&!confirm("Have you independently verified the UTR, amount and transaction in the official bank/UPI account? Only approve if verified."))return;
-    review.disabled=true;
-    const changes={payment_status:approve?"approved":"rejected",registration_status:approve?"confirmed":"rejected",reviewed_by:currentUser.id,reviewed_at:new Date().toISOString(),review_note:approve?"Payment manually verified by organiser.":String(note||"Payment could not be verified.").slice(0,500)};
-    const {error}=await sb.from("registrations").update(changes).eq("id",row.id);
-    if(error){setMessage("Review update failed: "+error.message,true);review.disabled=false;return;}
-    await refreshAll();
-  }
+  // Payment review is handled only by the authenticated removerse-review Edge Function below.
+  // Do not write review state directly from the browser: that bypasses email/audit workflow.
 });
 $("export").onclick=async()=>{
   const button=$("export");button.disabled=true;button.textContent="Building workbook…";
