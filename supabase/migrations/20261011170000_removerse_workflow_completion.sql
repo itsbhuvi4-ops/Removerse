@@ -179,3 +179,28 @@ end;
 $$;
 revoke all on function public.mark_removerse_arrived(uuid) from public, anon;
 grant execute on function public.mark_removerse_arrived(uuid) to authenticated;
+
+-- Public event catalogue exposes only event metadata and an aggregate availability count.
+create or replace function public.list_removerse_public_events()
+returns table(
+  id uuid, slug text, title text, category text, description text, subtitle text,
+  fee_inr numeric, registration_type text, min_team_size integer, max_team_size integer,
+  rules text, event_date date, venue text, coordinator text, seats integer,
+  seats_left integer, is_featured boolean
+)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select e.id,e.slug,e.title,e.category,e.description,e.subtitle,e.fee_inr,e.registration_type,
+    e.min_team_size,e.max_team_size,e.rules,e.event_date,e.venue,e.coordinator,e.seats,
+    case when e.seats is null then null else greatest(0,e.seats - (
+      select count(*)::integer from public.registrations r
+      where r.event_id=e.id and r.registration_status <> 'rejected'
+    )) end as seats_left,
+    e.is_featured
+  from public.events e where e.is_active=true order by e.is_featured desc,e.created_at asc;
+$$;
+revoke all on function public.list_removerse_public_events() from public;
+grant execute on function public.list_removerse_public_events() to anon, authenticated;
