@@ -20,7 +20,7 @@ Deno.serve(async req => {
     const emailLookup=lookup.includes("@");
     if(action==="request") {
       let query=db.from("registrations").select("email").limit(1);
-      query=emailLookup?query.ilike("email",lookup):query.eq("phone",normPhone(lookup));
+      query=emailLookup?query.ilike("email",lookup):query.eq("phone",lookup);
       const {data}=await query.maybeSingle();
       // Always return the same response to prevent registration enumeration.
       if(data?.email) {
