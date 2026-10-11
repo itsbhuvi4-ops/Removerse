@@ -25,6 +25,19 @@ Deno.serve(async req=>{
   const paid=action==="approve";
   const {error:updateError}=await db.from("registrations").update({payment_status:paid?"approved":"rejected",registration_status:paid?"confirmed":"rejected",reviewed_by:user.user.id,reviewed_at:new Date().toISOString(),review_note:paid?"Payment manually verified by organiser.":reason}).eq("id",id).eq("payment_status","pending_verification");
   if(updateError)return out({error:"Review update failed"},500);
+  const {data:details}=await db.from("registrations").select("registration_code,email,participant_name,team_name,fee_inr,events(title,event_date,venue)").eq("id",id).maybeSingle();
+  const resend=Deno.env.get("RESEND_API_KEY"),from=Deno.env.get("FROM_EMAIL"),site=Deno.env.get("SITE_URL")||"https://removerse-2027.vercel.app";
+  if(resend&&from&&details){
+    const esc=(v:unknown)=>String(v??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]!));
+    const ev=Array.isArray(details.events)?details.events[0]:details.events;
+    const team=details.team_name||details.participant_name;
+    const pass=JSON.stringify({registrationId:details.registration_code,team,event:ev?.title||"",date:ev?.event_date||"",venue:ev?.venue||""});
+    const html=paid
+      ? `<h2>Payment verified — REMOVERSE 2027</h2><p>Hi ${esc(details.participant_name)}, your payment for ${esc(ev?.title||"the event")} has been verified.</p><p>Team/participant: ${esc(team)}<br>Registration code: ${esc(details.registration_code)}<br>Event date: ${esc(ev?.event_date||"See official schedule")}<br>Venue: ${esc(ev?.venue||"See official event details")}</p><p>Boarding pass payload: <code>${esc(pass)}</code></p><p><a href="${esc(site)}/status.html">Open Check My Registration</a></p>`
+      : `<h2>Payment needs correction</h2><p>Hi ${esc(details.participant_name)}, your payment for ${esc(ev?.title||"the event")} was not approved.</p><p>Reason: ${esc(reason)}</p><p>Use Check My Registration to view the status and start a secure resubmission.</p><p><a href="${esc(site)}/status.html">Check My Registration</a></p>`;
+    const text=paid?`Payment verified for ${ev?.title||"event"}. Team: ${team}. Registration: ${details.registration_code}. Boarding pass: ${pass}. ${site}/status.html`:`Payment not approved for ${ev?.title||"event"}. Reason: ${reason}. ${site}/status.html`;
+    try{const mail=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${resend}`,"Content-Type":"application/json"},body:JSON.stringify({from,to:[details.email],subject:paid?"REMOVERSE payment verified":"REMOVERSE payment requires correction",html,text})});if(!mail.ok)console.error("review notification failed",await mail.text());}catch(e){console.error("review email exception",String(e));}
+  }
   return out({success:true,status:paid?"approved":"rejected"});
  }catch(e){console.error("review failed",e instanceof Error?e.message:"unknown");return out({error:"Could not process review"},500);}
 });
