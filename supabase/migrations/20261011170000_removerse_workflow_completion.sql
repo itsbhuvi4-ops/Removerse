@@ -138,9 +138,10 @@ begin
   if ev.registration_type = 'individual' and length(trim(coalesce(p_team,''))) > 0 then
     raise exception 'TEAM_NOT_ALLOWED';
   end if;
-  select registration_code into existing_code from public.registrations
-    where event_id = p_event_id and lower(email) = lower(trim(p_email))
-    order by created_at desc limit 1;
+  select r.registration_code into existing_code
+    from public.registrations as r
+    where r.event_id = p_event_id and lower(r.email) = lower(trim(p_email))
+    order by r.created_at desc limit 1;
   if found then raise exception 'DUPLICATE_EVENT_EMAIL:%', existing_code; end if;
   if ev.seats is not null then
     select count(*) into active_count from public.registrations
