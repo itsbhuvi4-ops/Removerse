@@ -76,17 +76,21 @@ Deno.serve(async (req: Request) => {
     if (paid && proof instanceof File && proof.size > 0) {
       return respond({ error: "Please submit the registration first, then upload proof in the payment step." }, 400);
     }
-    const { data: registration, error: insertError } = await supabase.from("registrations").insert({
-      event_id: event.id, participant_name: name, college, department, study_year: year, phone, email,
-      team_name: team || null, utr: paid ? utr : null, payment_proof_path: uploadedPath, fee_inr: Number(event.fee_inr),
-      payment_status: paid ? "pending_verification" : "not_required",
-      registration_status: paid ? "pending" : "confirmed", rules_accepted: true,
-    }).select("registration_code,fee_inr,payment_status,registration_status").single();
+    const { data: inserted, error: insertError } = await supabase.rpc("create_removerse_registration", {
+      p_event_id: event.id, p_name: name, p_college: college, p_department: department,
+      p_study_year: year, p_phone: phone, p_email: email, p_team: team, p_rules_accepted: true,
+    });
+    const registration = Array.isArray(inserted) ? inserted[0] : inserted;
     if (insertError || !registration) {
-      if (uploadedPath) await supabase.storage.from("removerse-payment-proofs").remove([uploadedPath]);
-      uploadedPath = null;
-      console.error("registration insert failed", insertError?.message);
-      return respond({ error: "We could not save your registration. Please try again." }, 500);
+      const message = insertError?.message || "";
+      console.error("atomic registration insert failed", message);
+      if (message.includes("DUPLICATE_EVENT_EMAIL")) return respond({ error: "This email already has a registration for this event. Use Check My Registration if you need to resubmit a rejected payment." }, 409);
+      if (message.includes("EVENT_FULL")) return respond({ error: "Sorry, this event has reached its registration limit." }, 409);
+      if (message.includes("EVENT_UNAVAILABLE")) return respond({ error: "This event is closed or unavailable." }, 400);
+      if (message.includes("TEAM_REQUIRED")) return respond({ error: "Please enter your team name." }, 400);
+      if (message.includes("TEAM_NOT_ALLOWED")) return respond({ error: "Team name is not accepted for this individual event." }, 400);
+      if (message.includes("RULES_REQUIRED")) return respond({ error: "You must accept the event rules." }, 400);
+      return respond({ error: "We could not save your registration. Please review the details and try again." }, 500);
     }
     if (!paid) {
       const resendKey = Deno.env.get("RESEND_API_KEY"), fromEmail = Deno.env.get("FROM_EMAIL");
