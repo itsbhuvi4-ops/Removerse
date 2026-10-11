@@ -41,6 +41,8 @@ Deno.serve(async (req: Request) => {
     const phone = text(form, "phone", 24);
     const email = text(form, "email", 254).toLowerCase();
     const team = text(form, "team", 100);
+    const membersRaw = text(form, "members", 2000);
+    const members = eventMembers(membersRaw);
     const utr = text(form, "utr", 80);
     const rulesAccepted = form.get("rules") === "true";
     if (!/^[0-9a-f-]{36}$/i.test(eventId)) return respond({ error: "Invalid event selection." }, 400);
@@ -68,6 +70,8 @@ Deno.serve(async (req: Request) => {
       .select("id,title,fee_inr,registration_type,min_team_size,max_team_size,is_active").eq("id", eventId).maybeSingle();
     if (eventError || !event || !event.is_active) return respond({ error: "This event is unavailable. Refresh the page and try again." }, 400);
     if (event.registration_type === "team" && team.length < 2) return respond({ error: "Please enter your team name." }, 400);
+    if (event.registration_type === "team" && (members.length < Number(event.min_team_size || 2) || members.length > Number(event.max_team_size || 10))) return respond({ error: "Enter between "+event.min_team_size+" and "+event.max_team_size+" team members, one per line." }, 400);
+    if (members.some(v=>v.length>100)) return respond({ error: "Each team member name must be 100 characters or fewer." }, 400);
     if (event.registration_type === "individual" && team) return respond({ error: "Team name is not accepted for this event." }, 400);
     const paid = Number(event.fee_inr) > 0;
     // Paid registrations are created before the payment countdown and proof upload.
@@ -78,7 +82,7 @@ Deno.serve(async (req: Request) => {
     }
     const { data: inserted, error: insertError } = await supabase.rpc("create_removerse_registration", {
       p_event_id: event.id, p_name: name, p_college: college, p_department: department,
-      p_study_year: year, p_phone: phone, p_email: email, p_team: team, p_rules_accepted: true,
+      p_study_year: year, p_phone: phone, p_email: email, p_team: team, p_members: event.registration_type === "team" ? members : [name], p_rules_accepted: true,
     });
     const registration = Array.isArray(inserted) ? inserted[0] : inserted;
     if (insertError || !registration) {
@@ -88,6 +92,7 @@ Deno.serve(async (req: Request) => {
       if (message.includes("EVENT_FULL")) return respond({ error: "Sorry, this event has reached its registration limit." }, 409);
       if (message.includes("EVENT_UNAVAILABLE")) return respond({ error: "This event is closed or unavailable." }, 400);
       if (message.includes("TEAM_REQUIRED")) return respond({ error: "Please enter your team name." }, 400);
+      if (message.includes("TEAM_SIZE_INVALID")) return respond({ error: "The team member count does not match the event rules." }, 400);
       if (message.includes("TEAM_NOT_ALLOWED")) return respond({ error: "Team name is not accepted for this individual event." }, 400);
       if (message.includes("RULES_REQUIRED")) return respond({ error: "You must accept the event rules." }, 400);
       return respond({ error: "We could not save your registration. Please review the details and try again." }, 500);
