@@ -11,12 +11,25 @@ Deno.serve(async req => {
   if (req.method === "OPTIONS") return new Response("ok",{headers});
   if (req.method !== "POST") return json({error:"Method not allowed"},405);
   const url=Deno.env.get("SUPABASE_URL"), key=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), resend=Deno.env.get("RESEND_API_KEY"), from=Deno.env.get("FROM_EMAIL");
-  if(!url||!key||!resend||!from) return json({error:"Server configuration is incomplete"},500);
+  if(!url||!key) return json({error:"Server configuration is incomplete"},500);
   const db=createClient(url,key,{auth:{persistSession:false}});
   try {
     const body=await req.json(); const action=String(body.action||"");
     const lookup=String(body.lookup||"").trim().slice(0,254);
+    if(action==="code_status") {
+      const registrationCode=String(body.registrationCode||"").trim().toUpperCase();
+      if(!/^RMV-[A-F0-9]{10}$/.test(registrationCode)) return json({error:"Enter a valid registration code, such as RMV-EDD623D59E."},400);
+      const {data:r,error}=await db.from("registrations")
+        .select("id,registration_code,participant_name,team_name,college,email,phone,fee_inr,payment_status,registration_status,created_at,uploaded_at,review_note,arrived_at,events(title,slug,event_date,venue)")
+        .eq("registration_code",registrationCode).maybeSingle();
+      if(error){console.error("registration-code status lookup failed",error.message);return json({error:"Could not check status right now. Please try again."},500);}
+      if(!r)return json({error:"No registration was found for that code. Check the code and try again."},404);
+      const event=Array.isArray(r.events)?r.events[0]:r.events;
+      const boardingPassPayload=JSON.stringify({registrationId:r.registration_code,team:r.team_name||r.participant_name,event:event?.title||"",date:event?.event_date||"",venue:event?.venue||""});
+      return json({success:true,registrations:[{...r,boardingPassPayload}]});
+    }
     if(action==="request") {
+      if(!resend||!from) return json({error:"Email verification is not configured. Use your registration code to check status."},503);
       if(!lookup) return json({error:"Enter your registration email or phone."},400);
       const emailLookup=lookup.includes("@");
       let query=db.from("registrations").select("email").limit(1);
