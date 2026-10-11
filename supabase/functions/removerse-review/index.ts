@@ -17,6 +17,23 @@ Deno.serve(async req=>{
  if(profile?.role!=="admin")return out({error:"Admin role required"},403);
  try{
   const b=await req.json(),id=String(b.id||""),action=String(b.action||""),reason=String(b.reason||"").trim().slice(0,500);
+  if(action==="resend_confirmation") {
+   if(!id)return out({error:"Registration ID is required"},400);
+   const {data:details,error:detailError}=await db.from("registrations").select("id,registration_code,email,participant_name,team_name,fee_inr,payment_status,registration_status,events(title,event_date,venue)").eq("id",id).maybeSingle();
+   if(detailError||!details)return out({error:"Registration not found"},404);
+   if(details.payment_status!=="approved"||details.registration_status!=="confirmed")return out({error:"Only an already-approved and confirmed registration can receive a confirmation resend"},409);
+   const resend=Deno.env.get("RESEND_API_KEY"),from=Deno.env.get("FROM_EMAIL"),site=Deno.env.get("SITE_URL")||"https://removerse-2027.vercel.app";
+   if(!resend||!from)return out({error:"Email service is not configured. Check RESEND_API_KEY and FROM_EMAIL."},503);
+   const esc=(v:unknown)=>String(v??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]!));
+   const ev=Array.isArray(details.events)?details.events[0]:details.events, team=details.team_name||details.participant_name;
+   const html=`<h2>Thank you for registering — REMOVERSE 2027!</h2><p>Hi ${esc(details.participant_name)}, thank you for registering for ${esc(ev?.title||"REMOVERSE 2027")}.</p><p>Our organising team has manually verified your payment, and your registration is confirmed.</p><p><strong>Payment Status:</strong> Approved<br><strong>Registration Status:</strong> Confirmed<br>Team/participant: ${esc(team)}<br>Registration code: ${esc(details.registration_code)}<br>Event date: ${esc(ev?.event_date||"See official schedule")}<br>Venue: ${esc(ev?.venue||"See official event details")}</p><p><a href="${esc(site)}/status.html">Check My Registration</a></p>`;
+   const text=`Thank you for registering for ${ev?.title||"REMOVERSE 2027"}. Your payment has been manually verified and your registration is confirmed. Payment Status: Approved. Registration Status: Confirmed. Team/participant: ${team}. Registration code: ${details.registration_code}. Check your registration: ${site}/status.html`;
+   try {
+    const mail=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${resend}`,"Content-Type":"application/json"},body:JSON.stringify({from,to:[details.email],subject:"Thank you for registering — REMOVERSE 2027 confirmed",html,text})});
+    if(!mail.ok){console.error("confirmation resend failed",await mail.text());return out({error:"The registration remains approved, but the confirmation email could not be sent. Check Resend configuration/logs."},502);}
+    return out({success:true,status:"approved",emailSent:true,resent:true});
+   } catch(e) {console.error("confirmation resend exception",String(e));return out({error:"The registration remains approved, but the confirmation email could not be sent."},502);}
+  }
   if(!id||!["approve","reject"].includes(action))return out({error:"Invalid action"},400);
   if(action==="reject"&&!reason)return out({error:"Rejection reason is required"},400);
   const {data:r,error}=await db.from("registrations").select("id,fee_inr,payment_status,payment_proof_path").eq("id",id).maybeSingle();
