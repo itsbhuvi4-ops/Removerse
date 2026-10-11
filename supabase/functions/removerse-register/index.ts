@@ -47,7 +47,7 @@ Deno.serve(async (req: Request) => {
     const utr = text(form, "utr", 80);
     const rulesAccepted = form.get("rules") === "true";
     if (!/^[0-9a-f-]{36}$/i.test(eventId)) return respond({ error: "Invalid event selection." }, 400);
-    if (name.length < 2 || college.length < 2 || department.length < 2 || !year || phone.length < 8 || !validEmail(email)) return respond({ error: "Please check all required participant details." }, 400);
+    if (name.length < 2 || college.length < 2 || department.length < 2 || !year || !/^[0-9+ ()-]{8,18}$/.test(phone) || !validEmail(email)) return respond({ error: "Please check all required participant details." }, 400);
     if (!rulesAccepted) return respond({ error: "You must accept the event rules." }, 400);
     const url = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
