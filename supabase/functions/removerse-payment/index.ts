@@ -17,10 +17,10 @@ Deno.serve(async req=>{
   if(type.includes("multipart/form-data")){form=await req.formData();action=String(form.get("action")||"upload");code=String(form.get("registrationCode")||"").trim();email=String(form.get("email")||"").trim().toLowerCase();}
   else{body=await req.json();action=String(body.action||"start");code=String(body.registrationCode||"").trim();email=String(body.email||"").trim().toLowerCase();}
   if(!code||!email||!/^\S+@\S+\.\S+$/.test(email))return json({error:"Registration code and valid email are required."},400);
-  const {data:r,error}=await db.from("registrations").select("id,registration_code,email,participant_name,team_name,event_id,fee_inr,payment_status,registration_status,payment_proof_path,uploaded_at,events(title)").eq("registration_code",code).ilike("email",email).maybeSingle();
+  const {data:r,error}=await db.from("registrations").select("id,registration_code,email,participant_name,team_name,college,event_id,fee_inr,payment_status,registration_status,payment_proof_path,uploaded_at,events(title)").eq("registration_code",code).ilike("email",email).maybeSingle();
   if(error||!r)return json({error:"Registration could not be verified. Check the code and email."},404);
   if(Number(r.fee_inr)<=0)return json({error:"This is a free event; no payment is required."},400);
-  if(r.payment_status==="approved"||r.payment_status==="rejected"&&action!=="upload")return json({error:"This registration is not accepting a new payment countdown."},409);
+  if(r.payment_status==="approved")return json({error:"This registration is not accepting a new payment countdown."},409);
   if(action==="start"){
    const startedAt=new Date().toISOString();
    const {error:upErr}=await db.from("registrations").update({payment_started_at:startedAt}).eq("id",r.id).in("payment_status",["pending_verification","rejected"]);
