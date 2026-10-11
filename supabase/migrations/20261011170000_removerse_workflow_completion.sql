@@ -158,7 +158,7 @@ begin
     case when ev.fee_inr > 0 then 'pending' else 'confirmed' end,
     true
   ) returning * into new_row;
-  return query select new_row.id, new_row.registration_code, new_row.fee_inr,
+  return query select new_row.id, new_row.registration_code, new_row.fee_inr::numeric,
     new_row.payment_status, new_row.registration_status, ev.title;
 end;
 $$;
