@@ -70,22 +70,11 @@ Deno.serve(async (req: Request) => {
     if (event.registration_type === "team" && team.length < 2) return respond({ error: "Please enter your team name." }, 400);
     if (event.registration_type === "individual" && team) return respond({ error: "Team name is not accepted for this event." }, 400);
     const paid = Number(event.fee_inr) > 0;
+    // Paid registrations are created before the payment countdown and proof upload.
+    // The separate removerse-payment Edge Function records server time and accepts the proof.
     const proof = form.get("proof");
-    if (paid) {
-      if (utr.length < 6) return respond({ error: "Enter the UPI transaction reference (UTR)." }, 400);
-      if (!(proof instanceof File) || proof.size < 1) return respond({ error: "Upload your payment screenshot or PDF." }, 400);
-      if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(proof.type)) return respond({ error: "Payment proof must be JPG, PNG, WebP or PDF." }, 400);
-      if (proof.size > 5 * 1024 * 1024) return respond({ error: "Payment proof must be 5 MB or smaller." }, 400);
-      const bytes = new Uint8Array(await proof.arrayBuffer());
-      if (!signatureMatches(proof.type, bytes)) return respond({ error: "The uploaded file does not match its declared type." }, 400);
-      const ext = proof.type === "application/pdf" ? "pdf" : proof.type === "image/png" ? "png" : proof.type === "image/webp" ? "webp" : "jpg";
-      uploadedPath = `pending/${crypto.randomUUID()}/proof.${ext}`;
-      const { error: uploadError } = await supabase.storage.from("removerse-payment-proofs").upload(uploadedPath, proof, { contentType: proof.type, upsert: false });
-      if (uploadError) {
-        console.error("proof upload failed", uploadError.message);
-        uploadedPath = null;
-        return respond({ error: "Payment proof upload failed. Please try again." }, 500);
-      }
+    if (paid && proof instanceof File && proof.size > 0) {
+      return respond({ error: "Please submit the registration first, then upload proof in the payment step." }, 400);
     }
     const { data: registration, error: insertError } = await supabase.from("registrations").insert({
       event_id: event.id, participant_name: name, college, department, study_year: year, phone, email,
@@ -99,10 +88,20 @@ Deno.serve(async (req: Request) => {
       console.error("registration insert failed", insertError?.message);
       return respond({ error: "We could not save your registration. Please try again." }, 500);
     }
+    if (!paid) {
+      const resendKey = Deno.env.get("RESEND_API_KEY"), fromEmail = Deno.env.get("FROM_EMAIL");
+      if (resendKey && fromEmail) {
+        const safe = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]!));
+        const site = Deno.env.get("SITE_URL") || "https://removerse-2027.vercel.app";
+        const html = `<p>Hi ${safe(name)},</p><p>Your free registration for <strong>${safe(event.title)}</strong> is confirmed.</p><p>Registration code: ${safe(registration.registration_code)}<br>College: ${safe(college)}</p><p><a href="${safe(site)}/status.html">Check My Registration</a></p>`;
+        try { const mail = await fetch("https://api.resend.com/emails", { method:"POST", headers:{Authorization:`Bearer ${resendKey}`,"Content-Type":"application/json"}, body:JSON.stringify({from:fromEmail,to:[email],subject:"REMOVERSE registration confirmed",html,text:`Your free registration for ${event.title} is confirmed. Registration code: ${registration.registration_code}. Check status: ${site}/status.html`}) }); if(!mail.ok) console.error("free confirmation email failed", await mail.text()); } catch(e) { console.error("free confirmation email exception", String(e)); }
+      }
+    }
     return respond({
       success: true, registrationCode: registration.registration_code, event: event.title, fee: registration.fee_inr,
       paymentStatus: registration.payment_status, registrationStatus: registration.registration_status,
-      message: paid ? "Registration received. Payment is pending manual organiser verification." : "Free registration saved successfully.",
+      paymentRequired: paid,
+      message: paid ? "Registration saved. Continue to the secure payment step to view the QR and upload proof." : "Free registration saved successfully.",
     }, 201);
   } catch (error) {
     if (uploadedPath && storageClient) {
