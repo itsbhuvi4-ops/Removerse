@@ -11,7 +11,7 @@
 <nav class="tabs"><button class="active" data-tab="registrations">Registrations</button><button data-tab="events">Events</button><button data-tab="exports">Exports</button></nav>
 <section id="registrations"><div class="bar"><input id="search" placeholder="Search name, ID, email, college…"><select id="statusfilter"><option value="">All statuses</option><option value="pending">Pending registration</option><option value="confirmed">Confirmed</option><option value="rejected">Rejected</option></select><button class="btn" id="refresh">Refresh data ↻</button></div><div class="tablewrap"><table><thead><tr><th>REGISTRATION</th><th>PARTICIPANT</th><th>EVENT / FEE</th><th>PAYMENT</th><th>PROOF</th><th>REVIEW ACTIONS</th></tr></thead><tbody id="rows"><tr><td colspan="6" class="empty">Loading registrations…</td></tr></tbody></table></div></section>
 <section id="events" hidden><div class="tablewrap"><table><thead><tr><th>EVENT</th><th>CATEGORY</th><th>FEE</th><th>TYPE</th><th>STATUS</th></tr></thead><tbody id="eventrows"></tbody></table></div><p class="small">Event details and fees come from Supabase. Update event content only through an authorised admin workflow.</p></section>
-<section id="exports" hidden><div class="panel"><h2>Export live registrations</h2><p>Downloads participant details from the secured admin session as a CSV file. Store exports securely and delete them when no longer needed.</p><button class="btn primary" id="export">Download CSV ↗</button></div></section>
+<section id="exports" hidden><div class="panel"><h2>Export live registrations</h2><p>Downloads an Excel workbook with registration details, short-lived proof links and embedded screenshot thumbnails where supported. Store exports securely and delete them when no longer needed.</p><button class="btn primary" id="export">Download Excel ↗</button></div></section>
 <div class="two"><article class="panel"><h2>Review checklist</h2><p>1. Open the private proof link. 2. Check UTR, amount, date and payer in the official bank/UPI account. 3. Approve only when the transaction is independently confirmed. 4. Reject with a clear note if it cannot be verified.</p></article><article class="panel"><h2>Data access</h2><p>Dashboard access is checked against the authenticated Supabase profile role. Row Level Security remains active on profiles, events and registrations. The service-role key is never shipped to the browser.</p></article></div></section>
 <div id="accessdenied" class="notice hidden"></div><p id="appmessage" class="small" role="status"></p>
 </main><footer><span>REMOVERSE 2027 · SECURE ORGANISER CONSOLE</span><a class="link" href="/">← Return to public website</a></footer>
@@ -33,7 +33,7 @@ async function checkAdmin(user){
     $("accessdenied").innerHTML="<b>Access denied.</b> This account is signed in but has not been explicitly assigned the REMOVERSE admin role. Ask the project owner to grant the role in Supabase; do not create public admin sign-up.";
     return;
   }
-  currentUser=user;$("loginpanel").classList.add("hidden");$("accessdenied").classList.add("hidden");$("dashboard").classList.remove("hidden");
+  currentUser=user;$("loginpanel").classList.add("hidden");$("accessdenied").classList.add("hidden");$("dashboard").classList.remove("hidden");subscribeRegistrationUpdates();
   $("signedin").textContent=esc(profile.display_name||user.email||"ADMIN")+" · ADMIN";
   await refreshAll();
 }
@@ -41,7 +41,7 @@ async function refreshAll(){
   if(!currentUser)return;
   setMessage("Refreshing live database…");
   const [regRes,eventRes]=await Promise.all([
-    sb.from("registrations").select("id,registration_code,event_id,participant_name,college,department,study_year,phone,email,team_name,utr,payment_proof_path,fee_inr,payment_status,registration_status,created_at,review_note,events(title)").order("created_at",{ascending:false}).limit(1000),
+    sb.from("registrations").select("id,registration_code,event_id,participant_name,college,department,study_year,phone,email,team_name,utr,payment_proof_path,fee_inr,payment_status,registration_status,created_at,payment_started_at,uploaded_at,arrived_at,admin_reminder_sent,review_note,events(title)").order("created_at",{ascending:false}).limit(1000),
     sb.from("events").select("id,title,category,fee_inr,registration_type,min_team_size,max_team_size,is_active").order("created_at",{ascending:true})
   ]);
   if(regRes.error)throw new Error("Could not load registrations: "+regRes.error.message);
@@ -71,7 +71,7 @@ $("loginform").addEventListener("submit",async e=>{
   catch(err){$("loginerror").textContent=err.message||"Sign-in failed.";}
   finally{button.disabled=false;button.textContent="Sign in securely ↗";}
 });
-$("signout").onclick=async()=>{await sb.auth.signOut();currentUser=null;registrations=[];$("dashboard").classList.add("hidden");$("loginpanel").classList.remove("hidden");setMessage("Signed out.");};
+$("signout").onclick=async()=>{await sb.auth.signOut();if(registrationChannel)sb.removeChannel(registrationChannel);currentUser=null;registrations=[];$("dashboard").classList.add("hidden");$("loginpanel").classList.remove("hidden");setMessage("Signed out.");};
 $("refresh").onclick=()=>refreshAll().catch(e=>setMessage(e.message,true));
 $("search").oninput=renderRows;$("statusfilter").onchange=renderRows;
 document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-tab]").forEach(x=>x.classList.toggle("active",x===b));["registrations","events","exports"].forEach(id=>$(id).hidden=id!==b.dataset.tab);});
@@ -98,11 +98,74 @@ $("rows").addEventListener("click",async e=>{
     await refreshAll();
   }
 });
-$("export").onclick=()=>{
-  const cols=["registration_code","created_at","participant_name","college","department","study_year","phone","email","team_name","utr","fee_inr","payment_status","registration_status","review_note","event"];
-  const csv=[cols.map(csvCell).join(","),...registrations.map(r=>cols.map(k=>csvCell(k==="event"?r.events?.title:r[k])).join(","))].join("\r\n");
-  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"}));a.download="removerse-registrations.csv";a.click();URL.revokeObjectURL(a.href);
+$("export").onclick=async()=>{
+  const button=$("export");button.disabled=true;button.textContent="Building workbook…";
+  try{
+    const ExcelJS=await import("https://cdn.jsdelivr.net/npm/exceljs@4.4.0/+esm");
+    const workbook=new ExcelJS.Workbook();workbook.creator="REMOVERSE Admin";workbook.created=new Date();
+    const sheet=workbook.addWorksheet("Registrations",{views:[{state:"frozen",ySplit:1}]});
+    sheet.columns=[
+      {header:"Registration code",key:"registration_code",width:20},{header:"Team / participant",key:"team",width:26},
+      {header:"Members",key:"members",width:30},{header:"College",key:"college",width:26},{header:"Email",key:"email",width:30},
+      {header:"Phone",key:"phone",width:18},{header:"Event",key:"event",width:24},{header:"Fee (INR)",key:"fee",width:12},
+      {header:"Payment status",key:"payment_status",width:20},{header:"Registration status",key:"registration_status",width:20},
+      {header:"Payment started",key:"payment_started_at",width:24},{header:"Proof uploaded",key:"uploaded_at",width:24},
+      {header:"Screenshot link",key:"proof",width:34},{header:"Proof thumbnail",key:"thumbnail",width:18}
+    ];
+    sheet.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};sheet.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF0C2347"}};
+    const eventById=new Map(events.map(e=>[e.id,e]));
+    for(const r of registrations){
+      const row=sheet.addRow({registration_code:r.registration_code,team:r.team_name||r.participant_name,members:Array.isArray(r.members)?r.members.join(", "):"",college:r.college,email:r.email,phone:r.phone,event:r.events?.title||eventById.get(r.event_id)?.title||"",fee:Number(r.fee_inr)||0,payment_status:r.payment_status,registration_status:r.registration_status,payment_started_at:r.payment_started_at||"",uploaded_at:r.uploaded_at||"",proof:"",thumbnail:""});
+      row.height=48;
+      if(r.payment_proof_path){
+        try{
+          const {data,error}=await sb.storage.from("removerse-payment-proofs").createSignedUrl(r.payment_proof_path,300);
+          if(!error&&data?.signedUrl){
+            row.getCell("proof").value={text:"Open private proof",hyperlink:data.signedUrl,tooltip:"Short-lived private screenshot link"};
+            const response=await fetch(data.signedUrl);
+            if(response.ok){
+              const buffer=await response.arrayBuffer(),bytes=new Uint8Array(buffer);
+              let binary="";for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
+              const base64=btoa(binary),type=response.headers.get("content-type")||"image/jpeg";
+              if(type.includes("jpeg")||type.includes("jpg")||type.includes("png")){
+                const imageId=workbook.addImage({base64:"data:"+type+";base64,"+base64,extension:type.includes("png")?"png":"jpeg"});
+                sheet.addImage(imageId,{tl:{col:13,row:row.number-1},br:{col:14,row:row.number}});
+              }
+            }
+          }
+        }catch(err){console.warn("Could not embed proof thumbnail",r.registration_code,err);}
+      }
+    }
+    sheet.autoFilter={from:"A1",to:"N1"};
+    const buffer=await workbook.xlsx.writeBuffer();const url=URL.createObjectURL(new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+    const a=document.createElement("a");a.href=url;a.download="removerse-registrations.xlsx";a.click();URL.revokeObjectURL(url);setMessage("Excel workbook downloaded.");
+  }catch(err){setMessage("Excel export failed: "+(err.message||"Please retry."),true);}
+  finally{button.disabled=false;button.textContent="Download Excel ↗";}
 };
+document.addEventListener("click",async e=>{
+  const button=e.target.closest("[data-review]");if(!button)return;
+  e.preventDefault();e.stopImmediatePropagation();
+  const row=registrations.find(r=>r.id===button.dataset.id);if(!row)return;
+  const action=button.dataset.review;
+  const reason=action==="reject"?prompt("Reason: payment not received, screenshot unclear, wrong amount, or other. Please enter details:"):"";
+  if(action==="reject"&&reason===null)return;
+  if(action==="approve"&&!confirm("Have you independently verified the UTR, amount and transaction in the official bank/UPI account? Only approve if verified."))return;
+  button.disabled=true;
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error("Your admin session has expired. Sign in again.");
+    const response=await fetch(SUPABASE_URL+"/functions/v1/removerse-review",{method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_PUBLISHABLE_KEY,"Authorization":"Bearer "+session.access_token},body:JSON.stringify({id:row.id,action,reason:String(reason||"").trim()})});
+    const result=await response.json();if(!response.ok||!result.success)throw new Error(result.error||"Review action failed.");
+    setMessage(action==="approve"?"Payment approved and student notification queued.":"Payment rejected and student notification queued.");
+    await refreshAll();
+  }catch(err){setMessage(err.message||"Review action failed.",true);button.disabled=false;}
+},true);
+let registrationChannel=null;
+function subscribeRegistrationUpdates(){
+  if(registrationChannel)sb.removeChannel(registrationChannel);
+  registrationChannel=sb.channel("removerse-admin-registrations")
+    .on("postgres_changes",{event:"*",schema:"public",table:"registrations"},()=>refreshAll().catch(e=>setMessage(e.message,true)))
+    .subscribe();
+}
 sb.auth.getSession().then(({data,error})=>{if(error){$("loginerror").textContent=error.message;return;}if(data.session)checkAdmin(data.session.user).catch(e=>setMessage(e.message,true));});
 sb.auth.onAuthStateChange((_event,session)=>{if(!session){currentUser=null;$("dashboard").classList.add("hidden");if($("accessdenied").classList.contains("hidden"))$("loginpanel").classList.remove("hidden");}});
 </script></body></html>
