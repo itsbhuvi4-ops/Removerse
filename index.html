@@ -35,7 +35,7 @@ function renderLiveEvents() {
   const visible = liveEvents.filter(event => liveFilter === "All Events" || event.category === liveFilter);
   liveCards.innerHTML = visible.length ? visible.map((event, index) => {
     const team = event.registration_type === "team";
-    return '<article class="card '+(index % 2 ? "light" : "")+'"><div class="cardtop"><span>✦ &nbsp;'+liveEsc(event.category.toUpperCase())+'</span><span>'+String(index+1).padStart(2,"0")+' / '+String(visible.length).padStart(2,"0")+'</span></div><div class="art"><div class="ring"></div><div class="num">'+String(index+1).padStart(2,"0")+'</div><div class="artlabel">'+(team?"LOGIC / BUILD / CREATE":"INSTINCT / ENERGY / PLAY")+'</div></div><div class="info"><div class="fee">'+(Number(event.fee_inr) ? "₹"+liveEsc(event.fee_inr)+" / ENTRY" : "FREE REGISTRATION")+'</div><h3>'+liveEsc(event.title)+'<span>.</span></h3><p class="subtitle">'+liveEsc(event.subtitle || "")+'</p><p class="desc">'+liveEsc(event.description || "")+'</p><div class="foot"><span>'+(team ? "TEAM · "+liveEsc(event.min_team_size)+"–"+liveEsc(event.max_team_size) : "INDIVIDUAL")+'</span><button data-live-event="'+liveEsc(event.id)+'">Register ↗</button></div></div></article>';
+    return '<article class="card '+(index % 2 ? "light" : "")+'"><div class="cardtop"><span>✦ &nbsp;'+liveEsc(event.category.toUpperCase())+'</span><span>'+String(index+1).padStart(2,"0")+' / '+String(visible.length).padStart(2,"0")+'</span></div><div class="art"><div class="ring"></div><div class="num">'+String(index+1).padStart(2,"0")+'</div><div class="artlabel">'+(team?"LOGIC / BUILD / CREATE":"INSTINCT / ENERGY / PLAY")+'</div></div><div class="info"><div class="fee">'+(Number(event.fee_inr) ? "₹"+liveEsc(event.fee_inr)+" / ENTRY" : "FREE REGISTRATION")+'</div><h3>'+liveEsc(event.title)+'<span>.</span></h3><p class="subtitle">'+liveEsc(event.subtitle || "")+'</p><p class="desc">'+liveEsc(event.description || "")+'</p><p class="desc" style="font-size:11px;line-height:1.7">'+(event.event_date?liveEsc(event.event_date)+" · ":"")+liveEsc(event.venue||"Venue to be announced")+(event.coordinator?" · Coordinator: "+liveEsc(event.coordinator):"")+(event.seats_left!==null&&event.seats_left!==undefined?" · "+event.seats_left+" seats left":"")+'</p><div class="foot"><span>'+(team ? "TEAM · "+liveEsc(event.min_team_size)+"–"+liveEsc(event.max_team_size) : "INDIVIDUAL")+'</span><button data-live-event="'+liveEsc(event.id)+'">Register ↗</button></div></div></article>';
   }).join("") : '<p class="note">No events are open for registration right now. Please check again later.</p>';
 }
 document.querySelectorAll("[data-filter]").forEach(button => {
@@ -51,7 +51,7 @@ liveCards.onclick = event => {
   liveChosen = liveEvents.find(item => item.id === button.dataset.liveEvent);
   if (!liveChosen) return;
   document.getElementById("modaltitle").textContent = liveChosen.title + ".";
-  document.getElementById("modaldesc").textContent = (Number(liveChosen.fee_inr) ? "Entry fee: ₹"+liveChosen.fee_inr : "Free registration") + " · " + (liveChosen.registration_type === "team" ? "Team of "+liveChosen.min_team_size+"–"+liveChosen.max_team_size : "Individual");
+  document.getElementById("modaldesc").textContent = (Number(liveChosen.fee_inr) ? "Entry fee: ₹"+liveChosen.fee_inr : "Free registration") + " · " + (liveChosen.registration_type === "team" ? "Team of "+liveChosen.min_team_size+"–"+liveChosen.max_team_size : "Individual") + (liveChosen.event_date ? " · Date: "+liveChosen.event_date : "") + (liveChosen.venue ? " · Venue: "+liveChosen.venue : "") + (liveChosen.coordinator ? " · Coordinator: "+liveChosen.coordinator : "") + (liveChosen.seats_left!==null&&liveChosen.seats_left!==undefined ? " · Seats left: "+liveChosen.seats_left : "") + (liveChosen.rules ? " · Rules: "+liveChosen.rules : "");
   const isTeam = liveChosen.registration_type === "team";
   const paid = Number(liveChosen.fee_inr) > 0;
   document.getElementById("teamwrap").style.display = isTeam ? "grid" : "none";
@@ -119,9 +119,7 @@ async function openPaymentFlow(registration) {
 }
 async function loadLiveEvents() {
   liveCards.innerHTML = '<p class="note">Loading live events…</p>';
-  const { data, error } = await removerseSupabase.from("events")
-    .select("id,slug,title,category,description,subtitle,fee_inr,registration_type,min_team_size,max_team_size,rules")
-    .eq("is_active", true).order("created_at", { ascending: true });
+  const { data, error } = await removerseSupabase.rpc("list_removerse_public_events");
   if (error) {
     liveCards.innerHTML = '<p class="note">Events could not load right now. Please refresh in a moment.</p>';
     console.error("REMOVERSE event load failed", error.message);
