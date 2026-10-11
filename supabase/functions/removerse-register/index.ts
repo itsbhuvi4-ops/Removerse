@@ -15,6 +15,7 @@ function text(form: FormData, key: string, max: number) {
   return value;
 }
 function validEmail(value: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); }
+function eventMembers(value: string) { return value.split(/\r?\n/).map(v => v.trim()).filter(Boolean).slice(0, 30); }
 function signatureMatches(type: string, bytes: Uint8Array) {
   if (type === "image/jpeg") return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
   if (type === "image/png") return bytes.length >= 8 && [137,80,78,71,13,10,26,10].every((v,i)=>bytes[i]===v);
