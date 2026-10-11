@@ -1,14 +1,17 @@
 import { defineConfig } from "vite";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        main: resolve(import.meta.dirname, "index.html"),
-        admin: resolve(import.meta.dirname, "admin.html"),
-        adminRoute: resolve(import.meta.dirname, "admin/index.html"),
-        status: resolve(import.meta.dirname, "status.html"),
+        main: resolve(root, "index.html"),
+        admin: resolve(root, "admin.html"),
+        adminRoute: resolve(root, "admin/index.html"),
+        status: resolve(root, "status.html"),
       },
     },
   },
