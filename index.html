@@ -11,4 +11,102 @@
 <div class="modalback" id="modalback"><div class="modal"><button class="close" id="close">✕</button><div class="index">EVENT REGISTRATION</div><h2 id="modaltitle">Register<span>.</span></h2><p id="modaldesc" class="muted"></p><div id="paynote" class="note" style="background:#fff1d7;color:#6a421b;padding:12px;display:none">Payment proof and UTR are collected for manual verification. Configure secure uploads and the official QR before accepting live payments.</div><form class="form" id="regform"><label>Full name<input name="name" required maxlength="100"></label><label>College<input name="college" required maxlength="160"></label><div class="row"><label>Department<input name="department" required></label><label>Year<select name="year" required><option value="">Choose</option><option>I Year</option><option>II Year</option><option>III Year</option><option>Other</option></select></label></div><div class="row"><label>Phone<input name="phone" type="tel" required pattern="[0-9+ ()-]{8,18}"></label><label>Email<input name="email" type="email" required></label></div><label id="teamwrap" style="display:none">Team name<input name="team"></label><label id="utrwrap" style="display:none">UPI Transaction ID / UTR<input name="utr" minlength="6" maxlength="80"></label><label id="proofwrap" style="display:none">Payment screenshot<input name="proof" type="file" accept="image/*"></label><label class="check"><input name="rules" type="checkbox" required> I have read and agree to the event rules and regulations.</label><button class="button gold" type="submit">Submit registration ↗</button><p class="fine">Demo mode saves only to this browser. Live proof uploads, admin review and email notifications require a secured backend.</p></form></div></div><div class="toast" id="toast" hidden></div>
 <script>
 const events=[{id:'e1',title:'Code Reboot',category:'Technical',subtitle:'Think. Build. Break limits.',fee:100,team:true,desc:'A high-energy technical challenge for curious minds and problem solvers.'},{id:'e2',title:'Pixel Panic',category:'Technical',subtitle:'Design under pressure.',fee:0,team:false,desc:'A creative digital design sprint where ideas meet execution.'},{id:'e3',title:'Mind Maze',category:'Non-Technical',subtitle:'Quick minds win.',fee:50,team:true,desc:'Decode clues, connect the dots and race the clock.'},{id:'e4',title:'Spotlight',category:'Non-Technical',subtitle:'Own the stage.',fee:0,team:false,desc:'Bring your presence, personality and performance to the spotlight.'}];let active='All Events',chosen=null;const cards=document.getElementById('cards');function render(){cards.innerHTML=events.filter(e=>active==='All Events'||e.category===active).map((e,i)=>'<article class="card '+(i%2?'light':'')+'"><div class="cardtop"><span>✦ &nbsp;'+e.category.toUpperCase()+'</span><span>'+String(i+1).padStart(2,'0')+' / 0'+events.length+'</span></div><div class="art"><div class="ring"></div><div class="num">0'+(i+1)+'</div><div class="artlabel">'+(e.team?'LOGIC / BUILD / CREATE':'INSTINCT / ENERGY / PLAY')+'</div></div><div class="info"><div class="fee">'+(e.fee?'₹'+e.fee+' / ENTRY':'FREE REGISTRATION')+'</div><h3>'+e.title+'<span>.</span></h3><p class="subtitle">'+e.subtitle+'</p><p class="desc">'+e.desc+'</p><div class="foot"><span>'+(e.team?'TEAM · 2–3':'INDIVIDUAL')+'</span><button data-id="'+e.id+'">Register ↗</button></div></div></article>').join('')}render();document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{active=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('active',x===b));render()});cards.onclick=e=>{const b=e.target.closest('[data-id]');if(!b)return;chosen=events.find(x=>x.id===b.dataset.id);document.getElementById('modaltitle').textContent=chosen.title+'.';document.getElementById('modaldesc').textContent=(chosen.fee?'Entry fee: ₹'+chosen.fee:'Free registration')+' · '+(chosen.team?'Team of 2–3':'Individual');document.getElementById('teamwrap').style.display=chosen.team?'grid':'none';document.getElementById('teamwrap').querySelector('input').required=chosen.team;['utrwrap','proofwrap','paynote'].forEach(id=>document.getElementById(id).style.display=chosen.fee?(id==='paynote'?'block':'grid'):'none');document.querySelector('[name=utr]').required=!!chosen.fee;document.querySelector('[name=proof]').required=!!chosen.fee;document.getElementById('modalback').classList.add('show')};function closeModal(){document.getElementById('modalback').classList.remove('show')}document.getElementById('close').onclick=closeModal;document.getElementById('modalback').onclick=e=>{if(e.target.id==='modalback')closeModal()};document.getElementById('regform').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target),id='RMV-'+Date.now().toString(36).toUpperCase(),r={id,event:chosen.title,createdAt:new Date().toISOString(),name:f.get('name'),college:f.get('college'),department:f.get('department'),year:f.get('year'),phone:f.get('phone'),email:f.get('email'),team:f.get('team')||'',fee:chosen.fee,utr:f.get('utr')||'',paymentStatus:chosen.fee?'pending_verification':'not_required',status:chosen.fee?'pending':'confirmed',rulesAccepted:true};let saved=false;try{const raw=localStorage.getItem('removerse-demo-registrations')||'[]';const all=JSON.parse(raw);if(!Array.isArray(all))throw new Error('Invalid demo storage');all.unshift(r);localStorage.setItem('removerse-demo-registrations',JSON.stringify(all));saved=JSON.parse(localStorage.getItem('removerse-demo-registrations')||'[]').some(x=>x.id===id)}catch(err){saved=false}const t=document.getElementById('toast');t.hidden=false;if(!saved){t.textContent='Registration was NOT saved. Browser storage may be full or disabled. Please try again later; no confirmation was created.';setTimeout(()=>t.hidden=true,9000);return}closeModal();t.textContent='DEMO ONLY — saved on this device, not sent to organisers · ID '+id+' · '+(chosen.fee?'Payment NOT verified':'Free demo registration');e.target.reset();setTimeout(()=>t.hidden=true,9000)};const mb=document.getElementById('menubtn');if(innerWidth<760){mb.style.display='inline-flex'}mb.onclick=()=>document.getElementById('navlinks').classList.toggle('open');window.addEventListener('resize',()=>mb.style.display=innerWidth<760?'inline-flex':'none');
-</script></body></html>
+</script>
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase-config.js";
+const removerseSupabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+let liveEvents = [];
+let liveChosen = null;
+let liveFilter = "All Events";
+const liveCards = document.getElementById("cards");
+const liveToast = document.getElementById("toast");
+function liveEsc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function liveNotify(message, error = false) {
+  liveToast.hidden = false;
+  liveToast.textContent = message;
+  liveToast.style.background = error ? "#541b20" : "#f5eee4";
+  liveToast.style.color = error ? "#fff" : "#21110e";
+  setTimeout(() => liveToast.hidden = true, 10000);
+}
+function renderLiveEvents() {
+  const visible = liveEvents.filter(event => liveFilter === "All Events" || event.category === liveFilter);
+  liveCards.innerHTML = visible.length ? visible.map((event, index) => {
+    const team = event.registration_type === "team";
+    return '<article class="card '+(index % 2 ? "light" : "")+'"><div class="cardtop"><span>✦ &nbsp;'+liveEsc(event.category.toUpperCase())+'</span><span>'+String(index+1).padStart(2,"0")+' / '+String(visible.length).padStart(2,"0")+'</span></div><div class="art"><div class="ring"></div><div class="num">'+String(index+1).padStart(2,"0")+'</div><div class="artlabel">'+(team?"LOGIC / BUILD / CREATE":"INSTINCT / ENERGY / PLAY")+'</div></div><div class="info"><div class="fee">'+(Number(event.fee_inr) ? "₹"+liveEsc(event.fee_inr)+" / ENTRY" : "FREE REGISTRATION")+'</div><h3>'+liveEsc(event.title)+'<span>.</span></h3><p class="subtitle">'+liveEsc(event.subtitle || "")+'</p><p class="desc">'+liveEsc(event.description || "")+'</p><div class="foot"><span>'+(team ? "TEAM · "+liveEsc(event.min_team_size)+"–"+liveEsc(event.max_team_size) : "INDIVIDUAL")+'</span><button data-live-event="'+liveEsc(event.id)+'">Register ↗</button></div></div></article>';
+  }).join("") : '<p class="note">No events are open for registration right now. Please check again later.</p>';
+}
+document.querySelectorAll("[data-filter]").forEach(button => {
+  button.addEventListener("click", () => {
+    liveFilter = button.dataset.filter;
+    document.querySelectorAll("[data-filter]").forEach(b => b.classList.toggle("active", b === button));
+    renderLiveEvents();
+  });
+});
+liveCards.onclick = event => {
+  const button = event.target.closest("[data-live-event]");
+  if (!button) return;
+  liveChosen = liveEvents.find(item => item.id === button.dataset.liveEvent);
+  if (!liveChosen) return;
+  document.getElementById("modaltitle").textContent = liveChosen.title + ".";
+  document.getElementById("modaldesc").textContent = (Number(liveChosen.fee_inr) ? "Entry fee: ₹"+liveChosen.fee_inr : "Free registration") + " · " + (liveChosen.registration_type === "team" ? "Team of "+liveChosen.min_team_size+"–"+liveChosen.max_team_size : "Individual");
+  const isTeam = liveChosen.registration_type === "team";
+  const paid = Number(liveChosen.fee_inr) > 0;
+  document.getElementById("teamwrap").style.display = isTeam ? "grid" : "none";
+  document.querySelector("[name=team]").required = isTeam;
+  ["utrwrap","proofwrap","paynote"].forEach(id => document.getElementById(id).style.display = paid ? (id === "paynote" ? "block" : "grid") : "none");
+  document.querySelector("[name=utr]").required = paid;
+  document.querySelector("[name=proof]").required = paid;
+  const fine = document.querySelector("#regform .fine");
+  fine.textContent = paid
+    ? "Your payment proof is stored privately. Registration remains pending until an organiser independently verifies the transaction."
+    : "Your registration will be saved securely and shared with the event organisers.";
+  document.getElementById("modalback").classList.add("show");
+};
+document.getElementById("regform").onsubmit = async event => {
+  event.preventDefault();
+  if (!liveChosen) return liveNotify("Please choose an event first.", true);
+  const form = event.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  submit.textContent = "Submitting securely…";
+  try {
+    const payload = new FormData(form);
+    payload.set("event_id", liveChosen.id);
+    payload.set("rules", form.querySelector('[name="rules"]').checked ? "true" : "false");
+    const response = await fetch(SUPABASE_URL + "/functions/v1/removerse-register", {
+      method: "POST",
+      headers: { "apikey": SUPABASE_PUBLISHABLE_KEY },
+      body: payload
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.success) throw new Error(result.error || "Registration could not be submitted. Please try again.");
+    document.getElementById("modalback").classList.remove("show");
+    form.reset();
+    liveNotify("SUCCESS · "+result.registrationCode+" · "+result.message+(result.fee ? " Entry fee: ₹"+result.fee+". Keep your transaction reference." : ""));
+  } catch (error) {
+    liveNotify(error instanceof Error ? error.message : "Registration failed. Please try again.", true);
+  } finally {
+    submit.disabled = false;
+    submit.textContent = "Submit registration ↗";
+  }
+};
+async function loadLiveEvents() {
+  liveCards.innerHTML = '<p class="note">Loading live events…</p>';
+  const { data, error } = await removerseSupabase.from("events")
+    .select("id,slug,title,category,description,subtitle,fee_inr,registration_type,min_team_size,max_team_size,rules")
+    .eq("is_active", true).order("created_at", { ascending: true });
+  if (error) {
+    liveCards.innerHTML = '<p class="note">Events could not load right now. Please refresh in a moment.</p>';
+    console.error("REMOVERSE event load failed", error.message);
+    return;
+  }
+  liveEvents = data || [];
+  renderLiveEvents();
+}
+loadLiveEvents();
+</script>
+
+</body></html>
