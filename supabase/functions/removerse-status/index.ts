@@ -24,6 +24,9 @@ Deno.serve(async req => {
       const {data}=await query.maybeSingle();
       // Always return the same response to prevent registration enumeration.
       if(data?.email) {
+        const rateCutoff=new Date(Date.now()-15*60*1000).toISOString();
+        const {count:recentCodes}=await db.from("registration_access_codes").select("id",{count:"exact",head:true}).eq("delivery_email",data.email).gte("created_at",rateCutoff);
+        if((recentCodes||0)>=5) return json({success:true,message:"If a registration matches those details, a verification code has been sent.",requestId:null});
         const code=String(crypto.getRandomValues(new Uint32Array(1))[0]%1000000).padStart(6,"0");
         const lookupHash=await hash((emailLookup?lookup.toLowerCase():normPhone(lookup))+"|"+crypto.randomUUID());
         const {data:stored,error:challengeError}=await db.from("registration_access_codes").insert({lookup_hash:lookupHash,delivery_email:data.email,code_hash:await hash(code),expires_at:new Date(Date.now()+10*60*1000).toISOString()}).select("id").single();
