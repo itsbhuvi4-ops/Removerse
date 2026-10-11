@@ -115,10 +115,23 @@ $("rows").addEventListener("click",async e=>{
   // Payment review is handled only by the authenticated removerse-review Edge Function below.
   // Do not write review state directly from the browser: that bypasses email/audit workflow.
 });
+async function loadExcelJS(){
+  if(window.ExcelJS&&typeof window.ExcelJS.Workbook==="function")return window.ExcelJS;
+  await new Promise((resolve,reject)=>{
+    const script=document.createElement("script");
+    script.src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js";
+    script.async=true;
+    script.onload=resolve;
+    script.onerror=()=>reject(new Error("Excel library could not be loaded. Check your internet connection and retry."));
+    document.head.appendChild(script);
+  });
+  if(!window.ExcelJS||typeof window.ExcelJS.Workbook!=="function")throw new Error("Excel library loaded, but its Workbook constructor is unavailable.");
+  return window.ExcelJS;
+}
 $("export").onclick=async()=>{
   const button=$("export");button.disabled=true;button.textContent="Building workbook…";
   try{
-    const ExcelJS=await import("https://cdn.jsdelivr.net/npm/exceljs@4.4.0/+esm");
+    const ExcelJS=await loadExcelJS();
     const workbook=new ExcelJS.Workbook();workbook.creator="REMOVERSE Admin";workbook.created=new Date();
     const sheet=workbook.addWorksheet("Registrations",{views:[{state:"frozen",ySplit:1}]});
     sheet.columns=[
