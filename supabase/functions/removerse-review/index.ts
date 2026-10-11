@@ -17,6 +17,20 @@ Deno.serve(async req=>{
  if(profile?.role!=="admin")return out({error:"Admin role required"},403);
  try{
   const b=await req.json(),id=String(b.id||""),action=String(b.action||""),reason=String(b.reason||"").trim().slice(0,500);
+  if(action==="delete_application") {
+   if(!id)return out({error:"Registration ID is required"},400);
+   const {data:target,error:targetError}=await db.from("registrations").select("id,registration_code,payment_proof_path").eq("id",id).maybeSingle();
+   if(targetError||!target)return out({error:"Registration not found"},404);
+   const {data:deleted,error:deleteError}=await db.from("registrations").delete().eq("id",id).select("id").maybeSingle();
+   if(deleteError)return out({error:"Application could not be deleted. No registration changes were confirmed."},500);
+   if(!deleted)return out({error:"Application was not deleted. Refresh the dashboard and try again."},409);
+   let proofRemoved=true;
+   if(target.payment_proof_path) {
+    const {error:storageError}=await db.storage.from("removerse-payment-proofs").remove([target.payment_proof_path]);
+    if(storageError){proofRemoved=false;console.error("application deleted but payment proof cleanup failed",target.registration_code,storageError.message);}
+   }
+   return out({success:true,deleted:true,registrationCode:target.registration_code,proofRemoved});
+  }
   if(action==="resend_confirmation") {
    if(!id)return out({error:"Registration ID is required"},400);
    const {data:details,error:detailError}=await db.from("registrations").select("id,registration_code,email,participant_name,team_name,fee_inr,payment_status,registration_status,events(title,event_date,venue)").eq("id",id).maybeSingle();
