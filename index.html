@@ -164,6 +164,7 @@ async function loadLiveEvents() {
     return;
   }
   liveEvents = data || [];
+  setRemoverseCountdown(liveEvents);
   renderLiveEvents();
 }
 loadLiveEvents();
