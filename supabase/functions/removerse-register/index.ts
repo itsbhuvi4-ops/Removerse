@@ -15,6 +15,7 @@ function text(form: FormData, key: string, max: number) {
   return value;
 }
 function validEmail(value: string) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); }
+function eventMembers(value: string) { return value.split(/\r?\n/).map(v => v.trim()).filter(Boolean).slice(0, 30); }
 function signatureMatches(type: string, bytes: Uint8Array) {
   if (type === "image/jpeg") return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
   if (type === "image/png") return bytes.length >= 8 && [137,80,78,71,13,10,26,10].every((v,i)=>bytes[i]===v);
@@ -41,10 +42,12 @@ Deno.serve(async (req: Request) => {
     const phone = text(form, "phone", 24);
     const email = text(form, "email", 254).toLowerCase();
     const team = text(form, "team", 100);
+    const membersRaw = text(form, "members", 2000);
+    const members = eventMembers(membersRaw);
     const utr = text(form, "utr", 80);
     const rulesAccepted = form.get("rules") === "true";
     if (!/^[0-9a-f-]{36}$/i.test(eventId)) return respond({ error: "Invalid event selection." }, 400);
-    if (name.length < 2 || college.length < 2 || department.length < 2 || !year || phone.length < 8 || !validEmail(email)) return respond({ error: "Please check all required participant details." }, 400);
+    if (name.length < 2 || college.length < 2 || department.length < 2 || !year || !/^[0-9+ ()-]{8,18}$/.test(phone) || !validEmail(email)) return respond({ error: "Please check all required participant details." }, 400);
     if (!rulesAccepted) return respond({ error: "You must accept the event rules." }, 400);
     const url = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -68,41 +71,47 @@ Deno.serve(async (req: Request) => {
       .select("id,title,fee_inr,registration_type,min_team_size,max_team_size,is_active").eq("id", eventId).maybeSingle();
     if (eventError || !event || !event.is_active) return respond({ error: "This event is unavailable. Refresh the page and try again." }, 400);
     if (event.registration_type === "team" && team.length < 2) return respond({ error: "Please enter your team name." }, 400);
+    if (event.registration_type === "team" && (members.length < Number(event.min_team_size || 2) || members.length > Number(event.max_team_size || 10))) return respond({ error: "Enter between "+event.min_team_size+" and "+event.max_team_size+" team members, one per line." }, 400);
+    if (members.some(v=>v.length>100)) return respond({ error: "Each team member name must be 100 characters or fewer." }, 400);
     if (event.registration_type === "individual" && team) return respond({ error: "Team name is not accepted for this event." }, 400);
     const paid = Number(event.fee_inr) > 0;
+    // Paid registrations are created before the payment countdown and proof upload.
+    // The separate removerse-payment Edge Function records server time and accepts the proof.
     const proof = form.get("proof");
-    if (paid) {
-      if (utr.length < 6) return respond({ error: "Enter the UPI transaction reference (UTR)." }, 400);
-      if (!(proof instanceof File) || proof.size < 1) return respond({ error: "Upload your payment screenshot or PDF." }, 400);
-      if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(proof.type)) return respond({ error: "Payment proof must be JPG, PNG, WebP or PDF." }, 400);
-      if (proof.size > 5 * 1024 * 1024) return respond({ error: "Payment proof must be 5 MB or smaller." }, 400);
-      const bytes = new Uint8Array(await proof.arrayBuffer());
-      if (!signatureMatches(proof.type, bytes)) return respond({ error: "The uploaded file does not match its declared type." }, 400);
-      const ext = proof.type === "application/pdf" ? "pdf" : proof.type === "image/png" ? "png" : proof.type === "image/webp" ? "webp" : "jpg";
-      uploadedPath = `pending/${crypto.randomUUID()}/proof.${ext}`;
-      const { error: uploadError } = await supabase.storage.from("removerse-payment-proofs").upload(uploadedPath, proof, { contentType: proof.type, upsert: false });
-      if (uploadError) {
-        console.error("proof upload failed", uploadError.message);
-        uploadedPath = null;
-        return respond({ error: "Payment proof upload failed. Please try again." }, 500);
-      }
+    if (paid && proof instanceof File && proof.size > 0) {
+      return respond({ error: "Please submit the registration first, then upload proof in the payment step." }, 400);
     }
-    const { data: registration, error: insertError } = await supabase.from("registrations").insert({
-      event_id: event.id, participant_name: name, college, department, study_year: year, phone, email,
-      team_name: team || null, utr: paid ? utr : null, payment_proof_path: uploadedPath, fee_inr: Number(event.fee_inr),
-      payment_status: paid ? "pending_verification" : "not_required",
-      registration_status: paid ? "pending" : "confirmed", rules_accepted: true,
-    }).select("registration_code,fee_inr,payment_status,registration_status").single();
+    const { data: inserted, error: insertError } = await supabase.rpc("create_removerse_registration", {
+      p_event_id: event.id, p_name: name, p_college: college, p_department: department,
+      p_study_year: year, p_phone: phone, p_email: email, p_team: team, p_members: event.registration_type === "team" ? members : [name], p_rules_accepted: true,
+    });
+    const registration = Array.isArray(inserted) ? inserted[0] : inserted;
     if (insertError || !registration) {
-      if (uploadedPath) await supabase.storage.from("removerse-payment-proofs").remove([uploadedPath]);
-      uploadedPath = null;
-      console.error("registration insert failed", insertError?.message);
-      return respond({ error: "We could not save your registration. Please try again." }, 500);
+      const message = insertError?.message || "";
+      console.error("atomic registration insert failed", message);
+      if (message.includes("DUPLICATE_EVENT_EMAIL")) return respond({ error: "This email already has a registration for this event. Use Check My Registration if you need to resubmit a rejected payment." }, 409);
+      if (message.includes("EVENT_FULL")) return respond({ error: "Sorry, this event has reached its registration limit." }, 409);
+      if (message.includes("EVENT_UNAVAILABLE")) return respond({ error: "This event is closed or unavailable." }, 400);
+      if (message.includes("TEAM_REQUIRED")) return respond({ error: "Please enter your team name." }, 400);
+      if (message.includes("TEAM_SIZE_INVALID")) return respond({ error: "The team member count does not match the event rules." }, 400);
+      if (message.includes("TEAM_NOT_ALLOWED")) return respond({ error: "Team name is not accepted for this individual event." }, 400);
+      if (message.includes("RULES_REQUIRED")) return respond({ error: "You must accept the event rules." }, 400);
+      return respond({ error: "We could not save your registration. Please review the details and try again." }, 500);
+    }
+    if (!paid) {
+      const resendKey = Deno.env.get("RESEND_API_KEY"), fromEmail = Deno.env.get("FROM_EMAIL");
+      if (resendKey && fromEmail) {
+        const safe = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]!));
+        const site = Deno.env.get("SITE_URL") || "https://removerse-2027.vercel.app";
+        const html = `<p>Hi ${safe(name)},</p><p>Your free registration for <strong>${safe(event.title)}</strong> is confirmed.</p><p>Registration code: ${safe(registration.registration_code)}<br>College: ${safe(college)}</p><p><a href="${safe(site)}/status.html">Check My Registration</a></p>`;
+        try { const mail = await fetch("https://api.resend.com/emails", { method:"POST", headers:{Authorization:`Bearer ${resendKey}`,"Content-Type":"application/json"}, body:JSON.stringify({from:fromEmail,to:[email],subject:"REMOVERSE registration confirmed",html,text:`Your free registration for ${event.title} is confirmed. Registration code: ${registration.registration_code}. Check status: ${site}/status.html`}) }); if(!mail.ok) console.error("free confirmation email failed", await mail.text()); } catch(e) { console.error("free confirmation email exception", String(e)); }
+      }
     }
     return respond({
       success: true, registrationCode: registration.registration_code, event: event.title, fee: registration.fee_inr,
       paymentStatus: registration.payment_status, registrationStatus: registration.registration_status,
-      message: paid ? "Registration received. Payment is pending manual organiser verification." : "Free registration saved successfully.",
+      paymentRequired: paid,
+      message: paid ? "Registration saved. Continue to the secure payment step to view the QR and upload proof." : "Free registration saved successfully.",
     }, 201);
   } catch (error) {
     if (uploadedPath && storageClient) {
