@@ -149,22 +149,10 @@ function updateRemoverseCountdown(){
  document.getElementById("cd-days").textContent=String(days).padStart(3,"0");document.getElementById("cd-hours").textContent=String(hours).padStart(2,"0");document.getElementById("cd-minutes").textContent=String(minutes).padStart(2,"0");document.getElementById("cd-seconds").textContent=String(seconds).padStart(2,"0");
 }
 function setRemoverseCountdown(events){
- const now=new Date();
- const dates=(events||[])
-   .map(e=>e.event_date)
-   .filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(String(d||"")))
-   .map(d=>new Date(d+"T00:00:00"))
-   .filter(d=>!Number.isNaN(d.getTime())&&d.getTime()>now.getTime())
-   .sort((a,b)=>a-b);
  const dateLabel=document.getElementById("countdown-date");
- if(!dates.length){
-   removerseCountdownTarget=null;
-   dateLabel.textContent="No upcoming event date set. Organisers can choose a date in Admin → Events.";
-   ["cd-days","cd-hours","cd-minutes","cd-seconds"].forEach(id=>document.getElementById(id).textContent=id==="cd-days"?"000":"00");
-   return;
- }
- removerseCountdownTarget=dates[0];
- dateLabel.textContent="Next event begins · "+removerseCountdownTarget.toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+ // Official REMOVERSE 2027 main-fest date (India Standard Time).
+ removerseCountdownTarget=new Date("2027-01-29T00:00:00+05:30");
+ dateLabel.textContent="REMOVERSE ’27 · Friday, 29 January 2027";
  updateRemoverseCountdown();
 }
 setInterval(updateRemoverseCountdown,1000);
