@@ -16,6 +16,46 @@
 .removerse-footer-bottom a{text-decoration:underline;text-underline-offset:4px}
 .removerse-footer-glow{position:absolute;z-index:-1;left:-10%;right:-10%;bottom:0;height:190px;background:radial-gradient(ellipse at 50% 100%,#43d95a24,transparent 68%);pointer-events:none}
 @media(max-width:600px){.removerse-cinematic-footer{min-height:520px;padding:80px 6vw 24px}.removerse-footer-wordmark{font-size:clamp(54px,13vw,86px)}.removerse-footer-nav{gap:22px;margin:28px 0 170px;font-size:15px}.removerse-footer-bottom{justify-content:center;text-align:center;flex-direction:column;gap:12px}.removerse-cinematic-footer:before{background:linear-gradient(180deg,#030504 0%,#030504 22%,#03050499 55%,#03050422 100%),url('/images/removerse-crowd.jpg') center bottom/auto 55% no-repeat}}
+
+/* REMOVERSE cinematic event discovery — preview-only visual refresh */
+#events.section.events{position:relative;isolation:isolate;overflow:hidden;background:#160808}
+#events.section.events:before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;opacity:.25;background-image:radial-gradient(#f1bd68 1px,transparent 1.2px);background-size:22px 22px;mask-image:linear-gradient(180deg,transparent,#000 12%,#000 88%,transparent)}
+#events .index{color:#f1bd68}
+#events .heading{display:block;text-align:center;max-width:900px;margin:22px auto 34px}
+#events .heading h2{font-size:clamp(48px,8vw,94px);line-height:.95;letter-spacing:-.045em;text-transform:uppercase}
+#events .heading p{max-width:620px;margin:20px auto 0;color:#d8c8bd;font-size:clamp(15px,2vw,18px);line-height:1.7}
+#events .filters{justify-content:center;gap:10px;flex-wrap:wrap;margin:0 0 28px}
+#events .filters button{border:1px solid #f6eee43b;border-radius:999px;background:#160b0b;color:#f6eee4;padding:12px 18px}
+#events .filters button.active,#events .filters button:hover{background:#a51f26;border-color:#a51f26;color:#fff}
+#events .cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;align-items:stretch}
+#events .card,#events .card.light{height:570px;min-height:570px;position:relative;display:flex;flex-direction:column;overflow:hidden;border:1px solid #f6eee42b;border-radius:28px;background:#160808;color:#f6eee4;box-shadow:0 18px 50px #0005;isolation:isolate;transition:transform .25s,border-color .25s}
+#events .card:hover{transform:translateY(-5px);border-color:#f1bd6890}
+#events .cardtop{position:absolute;z-index:3;top:0;left:0;right:0;display:flex;justify-content:space-between;gap:12px;padding:20px;color:#fff3e7;border-bottom:1px solid #ffffff18;background:linear-gradient(180deg,#160808d9,#16080800);font-size:10px;letter-spacing:.13em}
+#events .art{position:absolute;z-index:-1;inset:0;height:auto;min-height:0;overflow:hidden;background:radial-gradient(ellipse at 50% 24%,#a51f26 0%,#5c171b 26%,#291013 55%,#160808 82%)}
+#events .art:before{content:"";position:absolute;inset:0;background:linear-gradient(135deg,#f1bd6818,transparent 35%,#0003 70%),repeating-linear-gradient(135deg,transparent 0 38px,#f1bd6809 39px 40px);opacity:.9}
+#events .card:nth-child(4n+2) .art{background:radial-gradient(ellipse at 75% 20%,#8e1a20,#481519 35%,#211011 75%,#160808)}
+#events .card:nth-child(4n+3) .art{background:radial-gradient(ellipse at 22% 25%,#b18448,#613b25 22%,#351619 52%,#160808 85%)}
+#events .card:nth-child(4n) .art{background:radial-gradient(ellipse at 60% 24%,#7d292b,#351116 42%,#160808 83%)}
+#events .ring{width:min(64%,330px);aspect-ratio:1;position:absolute;left:50%;top:37%;transform:translate(-50%,-50%);border:1px solid #f1bd6860;border-radius:50%;box-shadow:0 0 0 20px #f1bd6808,0 0 0 48px #f1bd6807,0 0 80px #a51f2638}
+#events .ring:before,#events .ring:after{content:"";position:absolute;border:1px solid #f6eee42b;border-radius:50%;inset:13%}
+#events .ring:after{inset:29%;border-color:#f1bd6866}
+#events .num{position:absolute;top:16%;left:50%;transform:translateX(-50%);font-size:clamp(110px,16vw,210px);line-height:1;color:#f6eee4;opacity:.08;font-weight:900}
+#events .artlabel{position:absolute;top:58%;left:0;right:0;text-align:center;color:#f1bd68;letter-spacing:.28em;font-size:9px}
+#events .info{position:relative;z-index:2;margin-top:auto;padding:170px 24px 24px;background:linear-gradient(0deg,#160808 0%,#160808f5 48%,#160808a8 76%,transparent 100%);color:#f6eee4}
+#events .fee{display:inline-flex;align-items:center;border:1px solid #f1bd6875;border-radius:999px;padding:7px 11px;color:#f1bd68;font-size:10px;letter-spacing:.12em}
+#events .info h3{margin:15px 0 8px;color:#f6eee4;font-size:clamp(34px,4.1vw,52px);line-height:.98;letter-spacing:-.035em;text-transform:uppercase}
+#events .info h3 span{color:#f1bd68}
+#events .subtitle{color:#f1bd68;font-size:12px;letter-spacing:.04em}
+#events .desc{color:#d6c7bd;font-size:13px;line-height:1.65}
+#events .foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:17px;padding-top:17px;border-top:1px solid #f6eee42b}
+#events .foot span{color:#c9b8ae;font-size:9px;letter-spacing:.12em}
+#events .foot button{flex-shrink:0;border:1px solid #f1bd68a0;border-radius:14px;background:transparent;color:#f6eee4;padding:13px 17px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;transition:background .2s,color .2s}
+#events .foot button:hover{background:#f1bd68;color:#160808}
+#events>.note{max-width:760px;margin:24px auto 0;color:#b6a6a0;text-align:center;line-height:1.6}
+@media(min-width:1180px){#events .cards{grid-template-columns:repeat(3,minmax(0,1fr))}#events .card,#events .card.light{height:590px;min-height:590px}}
+@media(max-width:760px){#events.section.events{padding:76px 6vw}#events .heading{margin:14px auto 28px}#events .heading h2{font-size:clamp(44px,13vw,68px)}#events .heading p{font-size:15px}#events .cards{grid-template-columns:1fr;gap:20px}#events .card,#events .card.light{height:560px;min-height:560px;border-radius:26px}#events .info{padding:175px 21px 22px}#events .info h3{font-size:42px}#events .desc{font-size:12px}#events .foot button{padding:13px 14px}#events .filters button{padding:11px 15px}}
+@media(prefers-reduced-motion:reduce){#events .card{transition:none}}
+
 </style></head><body>
 <div class="topline"><span>GURU NANAK COLLEGE (AUTONOMOUS) · CHENNAI</span><span>SCHOOL OF INFORMATION TECHNOLOGY / BCA</span></div><header class="nav"><a class="brand" href="#"><span class="brand-mark">R</span><span>REMOVERSE<small>THE BCA FEST · 2027</small></span></a><nav class="navlinks" id="navlinks"><a href="#about">The vision</a><a href="#events">Events</a><a href="#details">Details</a><a href="/status.html" aria-label="Registration Status">Registration Status</a><a class="nav-cta" href="#events">Find your event ↗</a></nav><button class="button gold" id="menubtn" style="display:none" aria-label="Open menu">MENU</button></header>
 <main><section class="hero"><div class="orb one"></div><div class="orb two"></div><div class="hero-copy"><div class="eyebrow">SCHOOL OF INFORMATION TECHNOLOGY · EST. 2027</div><h1 aria-label="REMOVERSE 2027">REMOVERSE<sup>’27</sup></h1><p class="hero-sub">A new universe of <em>ideas, instinct</em><br>and impossible-to-ignore talent.</p><div class="actions"><a class="button gold" href="#events">Explore events ↗</a><a href="#about">Discover the fest ↓</a></div><div class="hero-meta"><span>◷ &nbsp; DATE TO BE ANNOUNCED</span><span>✦ &nbsp; BCA PRESENTS</span></div></div><div class="stamp"><span>ONE DAY.</span><b>ENDLESS</b><span>POSSIBILITIES.</span><i>GNC · CHENNAI</i></div><div class="bottom"><span>01 — THINK BEYOND</span><span>SCROLL TO EXPLORE ↓</span><span>13°00' N / 80°12' E</span></div></section>
@@ -36,7 +76,7 @@
     <p class="countdown-footnote">Your next chapter starts at REMOVERSE ’27.</p>
   </div>
 </section>
-<section class="section events" id="events"><div class="index">03 / CHOOSE YOUR WORLD</div><div class="heading"><h2>YOUR MOVE<span style="color:var(--gold)">.</span></h2><p>Pick a challenge. Bring your people. Make it count.</p></div><div class="filters"><button class="active" data-filter="All Events">All Events</button><button data-filter="Technical">Technical</button><button data-filter="Non-Technical">Non-Technical</button></div><div class="cards" id="cards"></div><p class="note">Event names, fees and rules shown are starter examples. Organisers should confirm and update the official event list before launch.</p></section>
+<section class="section events" id="events"><div class="index">03 / CHOOSE YOUR WORLD</div><div class="heading"><h2>DISCOVER EVENTS<span style="color:var(--gold)">.</span></h2><p>Find your arena. Bring your energy. Make your REMOVERSE story unforgettable.</p></div><div class="filters"><button class="active" data-filter="All Events">All Events</button><button data-filter="Technical">Technical</button><button data-filter="Non-Technical">Non-Technical</button></div><div class="cards" id="cards"></div><p class="note">Event names, fees and rules shown are starter examples. Organisers should confirm and update the official event list before launch.</p></section>
 <section class="section details" id="details"><div class="index">04 / BEFORE YOU ARRIVE</div><div class="detailsgrid"><h2>SHOW UP<br>READY<span>.</span></h2><div class="detail-list"><div><span>01</span><p><b>Registration</b><br>Choose an event and enter your participant details accurately.</p></div><div><span>02</span><p><b>Paid events</b><br>Complete the payment countdown, upload your payment screenshot, and wait for manual organiser verification.</p></div><div><span>03</span><p><b>Rules first</b><br>Read event-specific rules and bring your college ID on the day.</p></div></div></div></section><section class="closing"><p>THE NEXT CHAPTER STARTS HERE</p><h2>MAKE SOME<br><span>NOISE.</span></h2><a class="button gold" href="#events">Choose your event ↗</a></section></main>
 <footer class="removerse-cinematic-footer" id="site-footer">
 <div class="removerse-footer-glow" aria-hidden="true"></div>
